@@ -1,5 +1,10 @@
 # Google Cloud Agentic Architect Exam Guide
 
+> **About me** — I'm **Vishal Bulbule**, founder of the AI startup [TechTrapture](https://www.techtrapture.com), a Google Developer Expert (GDE) and an enterprise architect.
+> I contribute to the open-source [Google ADK](https://github.com/google/adk-python) project, build Agentic AI and MCP training through [TechTrapture Academy](https://academy.techtrapture.com), and have been creating Google Cloud content on [YouTube](https://youtube.com/@techtrapture) for 5 years.
+>
+> I took the Professional Agentic Architect **beta exam on 25 September 2026**. This guide is based on that exam experience, my experience building production agents, and the official exam guide and Google Cloud documentation.
+
 A study guide for the **Google Cloud Certified — Professional Agentic Architect** exam, organized around the five sections of the official exam guide.
 
 Every chapter covers its sub-objectives with core concepts, configuration snippets, decision tables, explicit trade-offs, **exam signals** (question keyword → likely answer), common distractors, and scenario-style practice questions with explanations — **83 in total**. **Visual memory maps** sit alongside the text: one-page diagrams of blocks, flows and decision paths for the topics that are easier to remember as a picture.
@@ -76,14 +81,12 @@ Hands-on walkthroughs from three [TechTrapture YouTube](https://youtube.com/@tec
 
 ## How this guide was built
 
-- Scope comes straight from the official exam guide's sections and in-scope tool list.
+- Scope comes straight from the official exam guide's sections and in-scope tool list, weighted by what stood out in the beta exam.
 - Content is researched against official Google documentation (docs.cloud.google.com, adk.dev, antigravity.google) and the ADK docs.
 - Anything that could not be confirmed in the docs is marked **(unverified)** in the chapters and collected in [Section 6.4](sections/06-cheat-sheet.md#64-items-flagged-unverified-by-research-dont-over-invest).
 
 > **Not affiliated with Google.** This is an independent study resource. Google Cloud products change quickly — always confirm details against the current [official documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/overview) and the exam guide on [Google Cloud certification](https://cloud.google.com/learn/certification).
 
-## Author
-
-**Vishal Bulbule** — Founder @ [TechTrapture](https://www.techtrapture.com)
+## Connect
 
 [YouTube](https://youtube.com/@techtrapture) · [LinkedIn](https://www.linkedin.com/in/vishal-bulbule/) · [Medium](https://vishalbulbule.medium.com/) · [X](https://x.com/vishal__bulbule)
