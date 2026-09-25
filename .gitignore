@@ -1,0 +1,6 @@
+# public twin: markdown + png only
+*.html
+*.htm
+*.css
+*.js
+.DS_Store
