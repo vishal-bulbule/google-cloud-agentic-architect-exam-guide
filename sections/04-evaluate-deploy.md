@@ -445,87 +445,111 @@ Gotchas:
 ### Practice questions
 
 **Q1.** Your team adds a new tool to an ADK customer-service agent. After the change, answers are still correct, but in 20% of cases the agent calls `lookup_order` twice before responding. You want CI to catch this class of regression cheaply on every pull request. What should you do?
-A. Add `final_response_match_v2` with threshold 0.9 to `test_config.json`.
-B. Add expected `tool_uses` to the `.test.json` cases and gate on `tool_trajectory_avg_score` with `match_type: EXACT` at 1.0.
-C. Enable an online monitor with the Tool Use Quality metric.
-D. Add `response_match_score` at 0.95.
+
+- **A.** Add `final_response_match_v2` with threshold 0.9 to `test_config.json`.
+- **B.** Add expected `tool_uses` to the `.test.json` cases and gate on `tool_trajectory_avg_score` with `match_type: EXACT` at 1.0.
+- **C.** Enable an online monitor with the Tool Use Quality metric.
+- **D.** Add `response_match_score` at 0.95.
+
 **Answer: B.** Duplicate calls are a trajectory defect; `EXACT` fails on extra calls and is deterministic and cheap for CI. Response metrics (A, D) pass because answers are correct; online monitors (C) find it only after production.
 
 **Q2.** A research agent issues between three and seven web searches in varying order before calling `write_report`. You need a trajectory metric that verifies `search` and `write_report` were both called, without failing on extra searches or order. Which ADK configuration fits?
-A. `tool_trajectory_avg_score` with `EXACT`.
-B. `tool_trajectory_avg_score` with `IN_ORDER`.
-C. `tool_trajectory_avg_score` with `ANY_ORDER`.
-D. `response_match_score` at 0.8.
+
+- **A.** `tool_trajectory_avg_score` with `EXACT`.
+- **B.** `tool_trajectory_avg_score` with `IN_ORDER`.
+- **C.** `tool_trajectory_avg_score` with `ANY_ORDER`.
+- **D.** `response_match_score` at 0.8.
+
 **Answer: C** (B is acceptable only if order `search`→`write_report` must be enforced; the stem says order doesn't matter). `ANY_ORDER` requires all expected calls present, tolerates extras and ordering. `EXACT` fails on variable search counts.
 
 **Q3.** A multi-turn travel-booking agent asks for missing details in different orders depending on how the user phrases requests, so fixed scripted turns keep failing even when the booking succeeds. You want automated evaluation of goal completion. What should you do?
-A. Record more golden conversations and use `tool_trajectory_avg_score`.
-B. Use ADK user simulation with a `ConversationScenario` (starting prompt, conversation plan, persona) and evaluate with `multi_turn_task_success_v1` and `hallucinations_v1`.
-C. Use `final_response_match_v2` on the last turn only.
-D. Use `adk conformance test` in replay mode.
+
+- **A.** Record more golden conversations and use `tool_trajectory_avg_score`.
+- **B.** Use ADK user simulation with a `ConversationScenario` (starting prompt, conversation plan, persona) and evaluate with `multi_turn_task_success_v1` and `hallucinations_v1`.
+- **C.** Use `final_response_match_v2` on the last turn only.
+- **D.** Use `adk conformance test` in replay mode.
+
 **Answer: B.** User simulation generates dynamic user turns; reference-free multi-turn criteria are supported with it. Reference-based criteria (A, C) aren't supported with user simulation, and replay (D) enforces the brittle fixed path.
 
 **Q4.** Your LLM judge metric for "regulatory compliance of responses" frequently disagrees with your compliance SMEs. You must prove the judge is trustworthy before using it as a release gate. What should you do first?
-A. Raise `sampling_count` to 32.
-B. Switch to BLEU against SME-written references.
-C. Build a human-rated dataset (`compliance/human_rating`), run the custom pointwise metric, and compute agreement with `evaluate_autorater`; iterate the rubric or tune a judge model until agreement is acceptable.
-D. Replace the judge with `safety_v1`.
+
+- **A.** Raise `sampling_count` to 32.
+- **B.** Switch to BLEU against SME-written references.
+- **C.** Build a human-rated dataset (`compliance/human_rating`), run the custom pointwise metric, and compute agreement with `evaluate_autorater`; iterate the rubric or tune a judge model until agreement is acceptable.
+- **D.** Replace the judge with `safety_v1`.
+
 **Answer: C.** Autorater calibration against human ratings is the documented way to validate a judge; tuning the judge is the next step. More samples (A) reduce variance but not bias; BLEU (B) and safety (D) measure the wrong thing.
 
 **Q5.** You're comparing a new system prompt against the production prompt on 2,000 historical queries stored in BigQuery, and you want the judge to pick the better response per query while controlling for position bias. Which approach is best?
-A. Pointwise `GENERAL_QUALITY` on each variant, compare averages.
-B. Pairwise model-based metric in the Gen AI evaluation service with `flip_enabled=True`, dataset loaded from BigQuery.
-C. ADK `response_match_score` between the two variants.
-D. Online monitors on both revisions.
+
+- **A.** Pointwise `GENERAL_QUALITY` on each variant, compare averages.
+- **B.** Pairwise model-based metric in the Gen AI evaluation service with `flip_enabled=True`, dataset loaded from BigQuery.
+- **C.** ADK `response_match_score` between the two variants.
+- **D.** Online monitors on both revisions.
+
 **Answer: B.** Pairwise metrics are designed for candidate-vs-baseline comparison, and response flipping mitigates position bias; BigQuery is a supported dataset source. A is possible but less sensitive; C isn't a quality judgment; D requires production exposure.
 
 **Q6.** An ADK agent deployed on Agent Runtime with default settings shows median latency of 4 s but max latency of 60 s during traffic bursts of ~300 concurrent requests. CPU usage per container is low. What should you change first?
-A. Increase `resource_limits` to 8 CPU / 32 Gi.
-B. Increase `container_concurrency` to a multiple of 9 (e.g., 36) and raise `min_instances`.
-C. Switch the model to Flash-Lite.
-D. Increase `max_instances` to 1000.
+
+- **A.** Increase `resource_limits` to 8 CPU / 32 Gi.
+- **B.** Increase `container_concurrency` to a multiple of 9 (e.g., 36) and raise `min_instances`.
+- **C.** Switch the model to Flash-Lite.
+- **D.** Increase `max_instances` to 1000.
+
 **Answer: B.** Default concurrency (9) assumes sync code; async ADK agents are underused, so requests queue while it scales out. Google's guidance is multiples of 9 plus enough `min_instances` for baseline load. Low CPU rules out A; D doesn't fix scale-out lag.
 
 **Q7.** A regulated bank needs an ADK agent that calls an internal pricing API reachable only on a private RFC 1918 address in a Shared VPC. The agent must run with minimal ops overhead inside a VPC Service Controls perimeter. Which design fits?
-A. Agent Runtime with a Serverless VPC Access connector.
-B. Agent Runtime with a Private Service Connect interface (network attachment in the service project, ≥ /28 subnet), DNS peering to the private zone, and the Agent Platform Service Agent granted network permissions on the host project.
-C. Cloud Run with public ingress and an API key.
-D. Agent Runtime with `max_instances=1000`.
+
+- **A.** Agent Runtime with a Serverless VPC Access connector.
+- **B.** Agent Runtime with a Private Service Connect interface (network attachment in the service project, ≥ /28 subnet), DNS peering to the private zone, and the Agent Platform Service Agent granted network permissions on the host project.
+- **C.** Cloud Run with public ingress and an API key.
+- **D.** Agent Runtime with `max_instances=1000`.
+
 **Answer: B.** Agent Runtime reaches private networks through PSC-I with DNS peering; Shared VPC needs the service agent's network roles. Connectors (A) are for Cloud Run; C violates the requirement; with VPC-SC/PSC-I `max_instances` is capped at 100 (D is also invalid).
 
 **Q8.** After moving an ADK agent from local testing to Cloud Run with `adk deploy cloud_run --project P --region R ./agent`, users report the agent forgets earlier turns intermittently, especially after quiet periods. What's the most likely cause and fix?
-A. Context window overflow; enable context caching.
-B. Sessions are held in the in-memory session service; redeploy with `--session_service_uri` pointing at Agent Platform Sessions (`agentengine://...`) or a Cloud SQL database URL.
-C. Session affinity is disabled; enable it.
-D. `max_llm_calls` is too low.
+
+- **A.** Context window overflow; enable context caching.
+- **B.** Sessions are held in the in-memory session service; redeploy with `--session_service_uri` pointing at Agent Platform Sessions (`agentengine://...`) or a Cloud SQL database URL.
+- **C.** Session affinity is disabled; enable it.
+- **D.** `max_llm_calls` is too low.
+
 **Answer: B.** Without `--session_service_uri`, the container uses in-memory sessions that are lost on scale-in and not shared across instances. Session affinity (C) is best-effort and doesn't survive instance termination.
 
 **Q9.** A LoopAgent with a critic and a reviser runs until `max_iterations=10` every time, doubling cost, even for documents the critic considers finished. What's the correct fix?
-A. Lower `max_llm_calls` to 50.
-B. Give the critic (or reviser) an `exit_loop` tool that sets `tool_context.actions.escalate = True`, and instruct it to call the tool when no further changes are needed.
-C. Convert the LoopAgent to a ParallelAgent.
-D. Increase the temperature of the critic.
+
+- **A.** Lower `max_llm_calls` to 50.
+- **B.** Give the critic (or reviser) an `exit_loop` tool that sets `tool_context.actions.escalate = True`, and instruct it to call the tool when no further changes are needed.
+- **C.** Convert the LoopAgent to a ParallelAgent.
+- **D.** Increase the temperature of the critic.
+
 **Answer: B.** LoopAgent stops at `max_iterations` or when a sub-agent emits an event with `escalate=True`; the loop has no exit signal. A only caps the damage; C changes semantics.
 
 **Q10.** Your SRE team needs to find which of 12 tools causes a p95 latency regression in a production agent on Agent Runtime and wants per-tool trends alertable in Cloud Monitoring. What should you use?
-A. Search Cloud Logging for "tool" and eyeball timestamps.
-B. Enable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true`, use the Observability Tools view / `gen_ai.execute_tool.duration` by `gen_ai.tool.name`, and inspect `execute_tool` spans in Cloud Trace for slow traces.
-C. Run `adk eval` with `tool_trajectory_avg_score`.
-D. Enable DEBUG logging in production.
+
+- **A.** Search Cloud Logging for "tool" and eyeball timestamps.
+- **B.** Enable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true`, use the Observability Tools view / `gen_ai.execute_tool.duration` by `gen_ai.tool.name`, and inspect `execute_tool` spans in Cloud Trace for slow traces.
+- **C.** Run `adk eval` with `tool_trajectory_avg_score`.
+- **D.** Enable DEBUG logging in production.
+
 **Answer: B.** The ADK/OTel tool-duration metric and trace spans attribute latency per tool and can be alerted on. Eval (C) checks correctness, not latency; DEBUG (D) is noisy and risks PII.
 
 **Q11.** Product leadership wants weekly SQL reports on cost per user, tool error rates by MCP server, and human-approval (HITL) turnaround time across all agents, joinable with Cloud Trace. What is the most direct solution?
-A. Export Cloud Monitoring metrics to CSV.
-B. Add `BigQueryAgentAnalyticsPlugin` to the ADK `App`, writing to an `agent_events` table, and query its event views (`v_llm_response`, `v_tool_error`, HITL events) joined on `trace_id`.
-C. Build a custom Pub/Sub logger in each tool.
-D. Use online monitors.
+
+- **A.** Export Cloud Monitoring metrics to CSV.
+- **B.** Add `BigQueryAgentAnalyticsPlugin` to the ADK `App`, writing to an `agent_events` table, and query its event views (`v_llm_response`, `v_tool_error`, HITL events) joined on `trace_id`.
+- **C.** Build a custom Pub/Sub logger in each tool.
+- **D.** Use online monitors.
+
 **Answer: B.** The plugin captures token usage, tool provenance (including MCP), HITL events, and trace IDs into partitioned BigQuery tables with ready views. C reinvents it; D measures quality, not usage analytics.
 
 **Q12.** Four weeks after launch, a RAG support agent's answers are rated worse by customers, but error rates and latency are flat. Offline evalsets still pass. What's the best next step?
-A. Roll back to the previous revision.
-B. Configure online monitors on production traces with hallucination and response-quality metrics, alert on the resulting Cloud Monitoring metrics, and add low-scoring production conversations to the golden evalset for regression.
-C. Raise `min_instances`.
-D. Switch to `trajectory_exact_match` in CI.
+
+- **A.** Roll back to the previous revision.
+- **B.** Configure online monitors on production traces with hallucination and response-quality metrics, alert on the resulting Cloud Monitoring metrics, and add low-scoring production conversations to the golden evalset for regression.
+- **C.** Raise `min_instances`.
+- **D.** Switch to `trajectory_exact_match` in CI.
+
 **Answer: B.** This is quality drift from changing real-world inputs/data; static evalsets don't reflect it. Online monitoring detects it continuously, and feeding failures back into the golden set closes the loop. Rollback (A) assumes a code regression that isn't evidenced.
 
 ---

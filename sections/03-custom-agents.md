@@ -961,187 +961,210 @@ Rule of thumb from the ADK docs: prompt-based multi-step procedures get *less re
 
 ### Practice questions
 
-**1.** A retail company runs an ADK customer-service agent on Cloud Run with 3–20 instances. Users report the agent "forgets" what they said two messages earlier, intermittently. The code uses `Runner(session_service=InMemorySessionService())`. What is the best fix with the least operational overhead?
-A. Enable Cloud Run session affinity
-B. Switch to `VertexAiSessionService` pointing at an Agent Runtime instance
-C. Store the conversation in `temp:` state
-D. Increase the model context window
+**Q1.** A retail company runs an ADK customer-service agent on Cloud Run with 3–20 instances. Users report the agent "forgets" what they said two messages earlier, intermittently. The code uses `Runner(session_service=InMemorySessionService())`. What is the best fix with the least operational overhead?
+
+- **A.** Enable Cloud Run session affinity
+- **B.** Switch to `VertexAiSessionService` pointing at an Agent Runtime instance
+- **C.** Store the conversation in `temp:` state
+- **D.** Increase the model context window
 
 **Answer: B.** In-memory sessions are per-instance and lost on scale events. Agent Platform Sessions is managed and needs only an Agent Runtime instance (no code deploy). Affinity is best-effort and still loses data on restart. `temp:` is never persisted.
 
-**2.** A travel agent must remember across months that a user prefers aisle seats. It must update that fact when the user later says "actually, window seats now", without keeping contradictory facts. Which approach fits?
-A. Write `user:seat_pref` state from a tool
-B. `VertexAiRagMemoryService` over transcripts
-C. Memory Bank via `VertexAiMemoryBankService`, generating memories from sessions
-D. `memories.create` for every utterance
+**Q2.** A travel agent must remember across months that a user prefers aisle seats. It must update that fact when the user later says "actually, window seats now", without keeping contradictory facts. Which approach fits?
+
+- **A.** Write `user:seat_pref` state from a tool
+- **B.** `VertexAiRagMemoryService` over transcripts
+- **C.** Memory Bank via `VertexAiMemoryBankService`, generating memories from sessions
+- **D.** `memories.create` for every utterance
 
 **Answer: C.** Memory Bank extracts and **consolidates**, resolving contradictions per scope. `user:` state works for one explicit key but gives no semantic recall or extraction. RAG memory returns raw transcripts, contradictions included. `memories.create` skips consolidation.
 
-**3.** A bank must host an open-weight model with its own fine-tuned weights. Traffic is predictable and high volume, and regulators prohibit multi-tenant inference services. The team wants to choose GPU types. Which serving option is best?
-A. Model Garden MaaS
-B. Self-deployed Model Garden endpoint with custom weights on a dedicated endpoint
-C. Gemini Flash-Lite with Provisioned Throughput
-D. LiteLLM pointing at a public API
+**Q3.** A bank must host an open-weight model with its own fine-tuned weights. Traffic is predictable and high volume, and regulators prohibit multi-tenant inference services. The team wants to choose GPU types. Which serving option is best?
+
+- **A.** Model Garden MaaS
+- **B.** Self-deployed Model Garden endpoint with custom weights on a dedicated endpoint
+- **C.** Gemini Flash-Lite with Provisioned Throughput
+- **D.** LiteLLM pointing at a public API
 
 **Answer: B.** Self-deployment fits custom weights, single-tenant or VPC data paths, hardware choice and lower TCO at steady volume. MaaS is serverless and multi-tenant, with no custom weights.
 
-**4.** Your ADK agent calls a Gemma model served by vLLM on GKE through `LiteLlm(model="openai/...", api_base=...)`. It answers in text but never invokes its tools. What is the most likely cause?
-A. Gemma cannot run on GKE
-B. The vLLM server wasn't started with tool calling enabled (`--enable-auto-tool-choice` and a tool-call parser)
-C. LiteLLM doesn't support tools
-D. `output_key` is missing
+**Q4.** Your ADK agent calls a Gemma model served by vLLM on GKE through `LiteLlm(model="openai/...", api_base=...)`. It answers in text but never invokes its tools. What is the most likely cause?
+
+- **A.** Gemma cannot run on GKE
+- **B.** The vLLM server wasn't started with tool calling enabled (`--enable-auto-tool-choice` and a tool-call parser)
+- **C.** LiteLLM doesn't support tools
+- **D.** `output_key` is missing
 
 **Answer: B.** The ADK docs call out enabling OpenAI-compatible tool calling on the serving side. Without it, the model returns plain text.
 
-**5.** An underwriting process must (1) extract fields with an LLM, (2) run a deterministic Python risk score, (3) route to "auto-approve" or "manual review" by score, and (4) pause for a human underwriter on manual review. Auditors need predictable paths. What should you build?
-A. One `LlmAgent` with a detailed instruction
-B. A coordinator `LlmAgent` with sub-agents using `transfer_to_agent`
-C. An ADK graph `Workflow` with a function node, a router `Event(route=...)`, and a `RequestInput` node
-D. A `LoopAgent` with `max_iterations=4`
+**Q5.** An underwriting process must (1) extract fields with an LLM, (2) run a deterministic Python risk score, (3) route to "auto-approve" or "manual review" by score, and (4) pause for a human underwriter on manual review. Auditors need predictable paths. What should you build?
+
+- **A.** One `LlmAgent` with a detailed instruction
+- **B.** A coordinator `LlmAgent` with sub-agents using `transfer_to_agent`
+- **C.** An ADK graph `Workflow` with a function node, a router `Event(route=...)`, and a `RequestInput` node
+- **D.** A `LoopAgent` with `max_iterations=4`
 
 **Answer: C.** Graph workflows mix code and LLM nodes, give explicit routing, and support deterministic HITL through `RequestInput`. LLM-driven transfer is non-deterministic.
 
-**6.** A research agent needs weather, news and stock data, which are independent calls, and then one summary. Latency matters. Which composition is correct?
-A. `SequentialAgent([weather, news, stocks, summarizer])`
-B. `SequentialAgent([ParallelAgent([weather, news, stocks]), summarizer])`, each fetcher with a distinct `output_key`
-C. `ParallelAgent([weather, news, stocks, summarizer])`
-D. `LoopAgent([weather, news, stocks])`
+**Q6.** A research agent needs weather, news and stock data, which are independent calls, and then one summary. Latency matters. Which composition is correct?
+
+- **A.** `SequentialAgent([weather, news, stocks, summarizer])`
+- **B.** `SequentialAgent([ParallelAgent([weather, news, stocks]), summarizer])`, each fetcher with a distinct `output_key`
+- **C.** `ParallelAgent([weather, news, stocks, summarizer])`
+- **D.** `LoopAgent([weather, news, stocks])`
 
 **Answer: B.** Fan-out/gather: the parallel children share state, so each needs a distinct key, and the summariser must run after all three. Option C runs the summariser concurrently with the fetchers.
 
-**7.** An orchestrator must consult a "tax specialist" agent, combine its answer with other findings, and keep talking to the user itself. Which mechanism fits?
-A. Add the specialist to `sub_agents`
-B. Wrap the specialist in `AgentTool` and add it to `tools`
-C. Expose the specialist through A2A even though it's in the same codebase
-D. Put the specialist in a `ParallelAgent`
+**Q7.** An orchestrator must consult a "tax specialist" agent, combine its answer with other findings, and keep talking to the user itself. Which mechanism fits?
+
+- **A.** Add the specialist to `sub_agents`
+- **B.** Wrap the specialist in `AgentTool` and add it to `tools`
+- **C.** Expose the specialist through A2A even though it's in the same codebase
+- **D.** Put the specialist in a `ParallelAgent`
 
 **Answer: B.** `AgentTool` keeps control with the parent and returns the child's result as a tool output. Transfer through `sub_agents` hands the conversation to the specialist. A2A adds needless network overhead for in-process code.
 
-**8.** Security requires that each deployed agent have its own auditable principal, not a shared service account, and that IAM grants exist before the code ships. What should you do?
-A. Create one custom service account per agent and set it at deploy
-B. Create the Agent Runtime instance with only `identity_type=AGENT_IDENTITY`, grant roles to its `principal://…/reasoningEngines/ID`, then `runtimes.update` with code
-C. Use the Reasoning Engine Service Agent and add roles
-D. Grant roles to `allUsers` temporarily
+**Q8.** Security requires that each deployed agent have its own auditable principal, not a shared service account, and that IAM grants exist before the code ships. What should you do?
+
+- **A.** Create one custom service account per agent and set it at deploy
+- **B.** Create the Agent Runtime instance with only `identity_type=AGENT_IDENTITY`, grant roles to its `principal://…/reasoningEngines/ID`, then `runtimes.update` with code
+- **C.** Use the Reasoning Engine Service Agent and add roles
+- **D.** Grant roles to `allUsers` temporarily
 
 **Answer: B.** Agent Identity is per-agent, SPIFFE-based and lifecycle-bound. The docs show creating the identity-only instance first so that IAM can be set before deployment. The service agent is shared across agents.
 
-**9.** After a platform team deleted and redeployed an Agent Runtime agent with the same display name and code, it gets `PERMISSION_DENIED` on a BigQuery dataset it could previously read. Why?
-A. Context-Aware Access blocked it
-B. The new resource has a new resource ID and therefore a new principal; the old bindings reference the deleted identity
-C. BigQuery doesn't support agent identities
-D. The display name must be unique
+**Q9.** After a platform team deleted and redeployed an Agent Runtime agent with the same display name and code, it gets `PERMISSION_DENIED` on a BigQuery dataset it could previously read. Why?
+
+- **A.** Context-Aware Access blocked it
+- **B.** The new resource has a new resource ID and therefore a new principal; the old bindings reference the deleted identity
+- **C.** BigQuery doesn't support agent identities
+- **D.** The display name must be unique
 
 **Answer: B.** An agent identity derives from the resource ID. Old bindings stay as inactive grants and must be re-created for the new principal, and cleaned up.
 
-**10.** Every Agent Runtime agent in a project needs log writing and metric writing. Only the "claims" agent may read the claims dataset. What is the most maintainable IAM design?
-A. Grant `logging.logWriter`, `monitoring.metricWriter` and dataset access to the project principal set
-B. Grant logging/metrics roles to `principalSet://…/attribute.platformContainer/aiplatform/projects/NUM`, and dataset read only to the claims agent's `principal://` identifier
-C. Grant everything to each agent individually
-D. Use a shared custom service account
+**Q10.** Every Agent Runtime agent in a project needs log writing and metric writing. Only the "claims" agent may read the claims dataset. What is the most maintainable IAM design?
+
+- **A.** Grant `logging.logWriter`, `monitoring.metricWriter` and dataset access to the project principal set
+- **B.** Grant logging/metrics roles to `principalSet://…/attribute.platformContainer/aiplatform/projects/NUM`, and dataset read only to the claims agent's `principal://` identifier
+- **C.** Grant everything to each agent individually
+- **D.** Use a shared custom service account
 
 **Answer: B.** The docs recommend broad baseline roles on the principal set and sensitive data roles on the individual agent.
 
-**11.** Engineers search a technical knowledge base by exact part numbers (for example "XR-7741-B"). Semantic-only retrieval in Vector Search 1.0 misses them, but conceptual queries work well. What should they implement?
-A. Switch to COSINE distance
-B. Hybrid index with dense and sparse (BM25) embeddings, merged by RRF with `rrf_ranking_alpha` around 0.5
-C. Increase `chunk_size`
-D. Use the `SEMANTIC_SIMILARITY` task type
+**Q11.** Engineers search a technical knowledge base by exact part numbers (for example "XR-7741-B"). Semantic-only retrieval in Vector Search 1.0 misses them, but conceptual queries work well. What should they implement?
+
+- **A.** Switch to COSINE distance
+- **B.** Hybrid index with dense and sparse (BM25) embeddings, merged by RRF with `rrf_ranking_alpha` around 0.5
+- **C.** Increase `chunk_size`
+- **D.** Use the `SEMANTIC_SIMILARITY` task type
 
 **Answer: B.** Sparse embeddings capture exact tokens and RRF fuses them with semantic results. An alpha of 1 would mean dense only.
 
-**12.** A RAG Engine corpus must use customer-managed encryption keys. The team also wants the managed vector store without operating any database. Which configuration?
-A. Serverless mode (Vector Search 2.0 backend)
-B. Spanner mode with RagManagedDb
-C. Weaviate backend
-D. Vector Search 1.0 backend managed by the team
+**Q12.** A RAG Engine corpus must use customer-managed encryption keys. The team also wants the managed vector store without operating any database. Which configuration?
+
+- **A.** Serverless mode (Vector Search 2.0 backend)
+- **B.** Spanner mode with RagManagedDb
+- **C.** Weaviate backend
+- **D.** Vector Search 1.0 backend managed by the team
 
 **Answer: B.** The docs state that CMEK is supported by RagManagedDb (Spanner mode). Serverless mode and the Vector Search backends don't support CMEK through RAG Engine.
 
-**13.** An ADK agent must let analysts query BigQuery with no extra infrastructure to host, using Google-managed MCP. The agent runs with its own identity. Which permissions does that identity need at minimum?
-A. `roles/mcp.toolUser` plus BigQuery data and job roles on the relevant resources
-B. `roles/owner`
-C. Only `roles/bigquery.dataViewer`
-D. An API key for the MCP endpoint
+**Q13.** An ADK agent must let analysts query BigQuery with no extra infrastructure to host, using Google-managed MCP. The agent runs with its own identity. Which permissions does that identity need at minimum?
+
+- **A.** `roles/mcp.toolUser` plus BigQuery data and job roles on the relevant resources
+- **B.** `roles/owner`
+- **C.** Only `roles/bigquery.dataViewer`
+- **D.** An API key for the MCP endpoint
 
 **Answer: A.** Remote MCP servers need `mcp.tools.call` (MCP Tool User) *and* the product's own permissions. BigQuery's MCP uses OAuth and IAM, not API keys.
 
-**14.** A company has 400 internal skills (SKILL.md packages). Loading them all into every agent's prompt is slow and costly. They also want versioned, centrally governed skills. What should the ADK agent use?
-A. Put all skills in the instruction
-B. `SkillToolset` backed by `GCPSkillRegistry`, so the agent calls `search_skills`/`load_skill` on demand
-C. One `AgentTool` per skill
-D. Agent Config YAML
+**Q14.** A company has 400 internal skills (SKILL.md packages). Loading them all into every agent's prompt is slow and costly. They also want versioned, centrally governed skills. What should the ADK agent use?
+
+- **A.** Put all skills in the instruction
+- **B.** `SkillToolset` backed by `GCPSkillRegistry`, so the agent calls `search_skills`/`load_skill` on demand
+- **C.** One `AgentTool` per skill
+- **D.** Agent Config YAML
 
 **Answer: B.** Skill Registry gives on-demand, targeted retrieval with immutable revisions and a default revision, and keeps the context window small.
 
-**15.** A refund agent is IAM-authorised to call `issue_refund`. Policy says refunds over $100 need a manager, and the rule changes quarterly. Prompt-injection through customer emails is a concern. What is the best control?
-A. Add the rule to the system instruction
-B. A semantic governance policy (natural language constraint) on the `issue_refund` tool, enforced at Agent Gateway
-C. Remove the tool's IAM permission
-D. Lower the model temperature
+**Q15.** A refund agent is IAM-authorised to call `issue_refund`. Policy says refunds over $100 need a manager, and the rule changes quarterly. Prompt-injection through customer emails is a concern. What is the best control?
+
+- **A.** Add the rule to the system instruction
+- **B.** A semantic governance policy (natural language constraint) on the `issue_refund` tool, enforced at Agent Gateway
+- **C.** Remove the tool's IAM permission
+- **D.** Lower the model temperature
 
 **Answer: B.** Semantic governance evaluates each proposed tool call against user intent and constraints, can reference parameters, resists context poisoning, and changes without redeploying. Instructions can be overridden by injected text, and removing IAM access breaks legitimate refunds.
 
-**16.** A logistics company uses a partner's hosted MCP server at `https://mcp.partner.example/mcp`. Orchestrator agents must discover the server and its tools at runtime, and security wants tool-level egress policies at Agent Gateway. What should the platform team do?
-A. Deploy a Cloud Run proxy with `--functional-type=mcp-server` so the partner server is auto-registered
-B. Run `gcloud agent-registry services create` with `--mcp-server-spec-type=tool-spec`, `--mcp-server-spec-content=@toolspec.json` and `--interfaces=url=…,protocolBinding=jsonrpc` in a supported region
-C. Register the URL as an Endpoint with `--endpoint-spec-type=no-spec`
-D. Hard-code the URL in `McpToolset` and rely on the gateway's unregistered-host allow rule
+**Q16.** A logistics company uses a partner's hosted MCP server at `https://mcp.partner.example/mcp`. Orchestrator agents must discover the server and its tools at runtime, and security wants tool-level egress policies at Agent Gateway. What should the platform team do?
+
+- **A.** Deploy a Cloud Run proxy with `--functional-type=mcp-server` so the partner server is auto-registered
+- **B.** Run `gcloud agent-registry services create` with `--mcp-server-spec-type=tool-spec`, `--mcp-server-spec-content=@toolspec.json` and `--interfaces=url=…,protocolBinding=jsonrpc` in a supported region
+- **C.** Register the URL as an Endpoint with `--endpoint-spec-type=no-spec`
+- **D.** Hard-code the URL in `McpToolset` and rely on the gateway's unregistered-host allow rule
 
 **Answer: B.** An external server needs manual registration, and the registry does not introspect it, so you must supply the tool spec for tools to be discoverable and policy-addressable. An Endpoint entry gives only host-level control. An unregistered-host rule can't express tool-level conditions.
 
-**17.** The team added three tools to a manually registered MCP server last week. Agents still can't find them with `search_mcp_servers`, and the console's **Tools** tab shows the old list. What is the fix?
-A. Wait for the registry's nightly re-scan
-B. Patch the `McpServer` resource with the new tools
-C. Run `gcloud agent-registry services update SERVER --mcp-server-spec-content=new-toolspec.json` with the complete tool list
-D. Delete and recreate the auth-provider binding
+**Q17.** The team added three tools to a manually registered MCP server last week. Agents still can't find them with `search_mcp_servers`, and the console's **Tools** tab shows the old list. What is the fix?
+
+- **A.** Wait for the registry's nightly re-scan
+- **B.** Patch the `McpServer` resource with the new tools
+- **C.** Run `gcloud agent-registry services update SERVER --mcp-server-spec-content=new-toolspec.json` with the complete tool list
+- **D.** Delete and recreate the auth-provider binding
 
 **Answer: C.** Manual entries are never re-introspected. You update the writable `Service`, and the uploaded spec **replaces** the existing tool definitions, so it must contain every tool. `McpServer` is read-only.
 
-**18.** An engineer binds an IAP egress policy to the auto-registered BigQuery MCP server with `gcloud iap web set-iam-policy … --resource-type=agent-registry --mcp-server=… --region=us-central1`. It fails with `NOT_FOUND`, although the server appears in the registry. Why?
-A. The BigQuery API isn't enabled
-B. Google-managed remote MCP servers are registered in the `global` location, so the binding must use `--region=global`
-C. Policies can't reference auto-registered servers
-D. The engineer lacks `roles/agentregistry.editor`
+**Q18.** An engineer binds an IAP egress policy to the auto-registered BigQuery MCP server with `gcloud iap web set-iam-policy … --resource-type=agent-registry --mcp-server=… --region=us-central1`. It fails with `NOT_FOUND`, although the server appears in the registry. Why?
+
+- **A.** The BigQuery API isn't enabled
+- **B.** Google-managed remote MCP servers are registered in the `global` location, so the binding must use `--region=global`
+- **C.** Policies can't reference auto-registered servers
+- **D.** The engineer lacks `roles/agentregistry.editor`
 
 **Answer: B.** Google remote MCP servers are auto-registered globally. Regional bindings on them aren't supported and return `NOT_FOUND`. The server is visible, so its API is already enabled.
 
-**19.** A bank runs a central governance project with an egress Agent Gateway in `us-central1`. MCP servers are deployed to Cloud Run in 12 workload projects with `--functional-type=mcp-server`. Agents calling them through the central gateway are denied as unregistered destinations. What is the best fix?
-A. Enable the Agent Registry API in the central project and wait for cross-project auto-discovery
-B. Manually register each MCP server in the central project's registry (in `us-central1` or `global`), grant `roles/iap.egressor` to the agent principals on those entries, and manage the entries' lifecycle
-C. Attach all 12 workload-project registries to the gateway
-D. Switch the gateway to `CLIENT_TO_AGENT` mode
+**Q19.** A bank runs a central governance project with an egress Agent Gateway in `us-central1`. MCP servers are deployed to Cloud Run in 12 workload projects with `--functional-type=mcp-server`. Agents calling them through the central gateway are denied as unregistered destinations. What is the best fix?
+
+- **A.** Enable the Agent Registry API in the central project and wait for cross-project auto-discovery
+- **B.** Manually register each MCP server in the central project's registry (in `us-central1` or `global`), grant `roles/iap.egressor` to the agent principals on those entries, and manage the entries' lifecycle
+- **C.** Attach all 12 workload-project registries to the gateway
+- **D.** Switch the gateway to `CLIENT_TO_AGENT` mode
 
 **Answer: B.** Automatic registration is single-project, so cross-project components must be registered manually in the central registry, aligned by region, and their entries don't auto-update. A gateway attaches at most two registries (one global and one regional). Cross-project governance is egress-only.
 
-**20.** An ADK agent must create Jira issues **as the signed-in employee**, with user consent. No OAuth secrets may appear in code. The Jira MCP server is registered in Agent Registry. What should you implement?
-A. Store a Jira API key in Secret Manager and send it through `header_provider`
-B. Create a 3-legged OAuth auth provider in Agent Identity auth manager, bind it to the agent with `gcloud agent-registry bindings create … --auth-provider=…`, handle `adk_request_credential` in the client, and pass `continue_uri` to `get_mcp_toolset`
-C. Grant the agent identity `roles/mcp.toolUser`
-D. Create a resource binding with `--target-identifier` set to the Jira server's URN
+**Q20.** An ADK agent must create Jira issues **as the signed-in employee**, with user consent. No OAuth secrets may appear in code. The Jira MCP server is registered in Agent Registry. What should you implement?
+
+- **A.** Store a Jira API key in Secret Manager and send it through `header_provider`
+- **B.** Create a 3-legged OAuth auth provider in Agent Identity auth manager, bind it to the agent with `gcloud agent-registry bindings create … --auth-provider=…`, handle `adk_request_credential` in the client, and pass `continue_uri` to `get_mcp_toolset`
+- **C.** Grant the agent identity `roles/mcp.toolUser`
+- **D.** Create a resource binding with `--target-identifier` set to the Jira server's URN
 
 **Answer: B.** Delegated user access is 3LO through the auth manager. The binding lets ADK resolve the provider automatically, and `continue_uri` is where the user returns after consent. An API key acts as the agent, not the user. `mcp.toolUser` only covers Google MCP servers.
 
-**21.** To "speed up onboarding," a platform team grants every agent identity `roles/agentregistry.editor` so that agents can self-register the tools they build. The security review flags this. What is the main risk?
-A. Editors can't search the registry
-B. An agent could modify tool annotations such as `readOnlyHint` or `destructiveHint`, which egress policies rely on, and could enroll a malicious third-party agent or server
-C. Editor exceeds the 100-bindings quota
-D. Editor grants `iap.egressor` implicitly
+**Q21.** To "speed up onboarding," a platform team grants every agent identity `roles/agentregistry.editor` so that agents can self-register the tools they build. The security review flags this. What is the main risk?
+
+- **A.** Editors can't search the registry
+- **B.** An agent could modify tool annotations such as `readOnlyHint` or `destructiveHint`, which egress policies rely on, and could enroll a malicious third-party agent or server
+- **C.** Editor exceeds the 100-bindings quota
+- **D.** Editor grants `iap.egressor` implicitly
 
 **Answer: B.** The docs explicitly warn against giving admin or editor roles to agents, because annotation and metadata tampering can make destructive tools look safe. Agents should hold `agentregistry.viewer`. Editor can't even create bindings (that needs admin).
 
-**22.** A low-code team's Agent Studio agent connects directly to an internal MCP server by URL. After a platform update, the tool is read-only and can't be edited. What should they do?
-A. Recreate the agent in ADK
-B. Register the MCP server in Agent Registry, remove the legacy direct connection, then add it through **Add (+) → MCP Server from Agent Registry** (Location, server, Auth Config)
-C. Re-enter the same URL as a new direct MCP connection
-D. Convert the server to an A2A agent
+**Q22.** A low-code team's Agent Studio agent connects directly to an internal MCP server by URL. After a platform update, the tool is read-only and can't be edited. What should they do?
+
+- **A.** Recreate the agent in ADK
+- **B.** Register the MCP server in Agent Registry, remove the legacy direct connection, then add it through **Add (+) → MCP Server from Agent Registry** (Location, server, Auth Config)
+- **C.** Re-enter the same URL as a new direct MCP connection
+- **D.** Convert the server to an A2A agent
 
 **Answer: B.** Agent Studio has deprecated direct MCP-server connections, and existing ones become read-only, in favor of registered servers. The server must be registered first. The agent then gets all of that server's tools, with access resolved through IAM when Auth Config is `None`.
 
-**23.** A support agent may call any **read-only** tool on the registered `crm-mcp` server, including tools added in the future, but no write tools. The server's tool spec carries accurate MCP annotations. What is the most precise and maintainable control?
-A. List the allowed tool names in the agent's system instruction
-B. Bind an IAP egress allow policy on `crm-mcp` (`gcloud iap web set-iam-policy … --mcp-server=crm-mcp`), granting `roles/iap.egressor` to the agent principal with a CEL condition on the tool's read-only attribute
-C. A Model Armor template with prompt-injection filtering
-D. Remove the write tools from the MCP server's code
+**Q23.** A support agent may call any **read-only** tool on the registered `crm-mcp` server, including tools added in the future, but no write tools. The server's tool spec carries accurate MCP annotations. What is the most precise and maintainable control?
+
+- **A.** List the allowed tool names in the agent's system instruction
+- **B.** Bind an IAP egress allow policy on `crm-mcp` (`gcloud iap web set-iam-policy … --mcp-server=crm-mcp`), granting `roles/iap.egressor` to the agent principal with a CEL condition on the tool's read-only attribute
+- **C.** A Model Armor template with prompt-injection filtering
+- **D.** Remove the write tools from the MCP server's code
 
 **Answer: B.** Egress IAM policies at Agent Gateway can condition on registry tool annotations, so new read-only tools are covered automatically and write tools are denied. Instructions are bypassable. Model Armor inspects content, not tool permissions. Removing tools breaks other consumers.
 

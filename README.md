@@ -5,6 +5,10 @@
 >
 > I took the Professional Agentic Architect **beta exam on 25 September 2026**. This guide is based on that exam experience, my experience building production agents, and the official exam guide and Google Cloud documentation.
 
+### 📥 [Download the full guide (PDF)](https://github.com/vishal-bulbule/google-cloud-agentic-architect-exam-guide/releases/latest/download/Google-Cloud-Agentic-Architect-Exam-Guide.pdf)
+
+Every chapter, all 83 practice questions and all 19 visual memory maps in one printable file. [![PDF downloads](https://img.shields.io/github/downloads/vishal-bulbule/google-cloud-agentic-architect-exam-guide/total?label=PDF%20downloads&color=0C56DC)](https://github.com/vishal-bulbule/google-cloud-agentic-architect-exam-guide/releases/latest)
+
 A study guide for the **Google Cloud Certified — Professional Agentic Architect** exam, organized around the five sections of the official exam guide.
 
 Every chapter covers its sub-objectives with core concepts, configuration snippets, decision tables, explicit trade-offs, **exam signals** (question keyword → likely answer), common distractors, and scenario-style practice questions with explanations — **83 in total**. **Visual memory maps** sit alongside the text: one-page diagrams of blocks, flows and decision paths for the topics that are easier to remember as a picture.
@@ -16,6 +20,7 @@ Every chapter covers its sub-objectives with core concepts, configuration snippe
 | | |
 |---|---|
 | 📘 **Read it end to end** | [AGENTIC_ARCHITECT_EXAM_GUIDE.md](AGENTIC_ARCHITECT_EXAM_GUIDE.md) — the whole guide in one file |
+| 📥 **Study offline** | [Download the PDF](https://github.com/vishal-bulbule/google-cloud-agentic-architect-exam-guide/releases/latest/download/Google-Cloud-Agentic-Architect-Exam-Guide.pdf) — print it or read it on any device |
 | 🗺️ **Plan your prep** | [Overview](sections/00-overview.md) — blueprint, where the marks are, 4-week study plan |
 | ⚡ **Last 72 hours** | [Cheat sheet](sections/06-cheat-sheet.md) — decision trees, numbers to memorize, traps |
 | 🔎 **Deep dives** | [Antigravity rules, hooks & skills](sections/02-coding-agents.md#22b-deep-dive--antigravity-rules-hooks-and-skills-paths-formats-when-to-use-which) · [Registering MCP servers in Agent Registry](sections/03-custom-agents.md#324-deep-dive--registering-mcp-servers-in-agent-registry) · [Agent-to-tool authentication](sections/05-security-governance.md#511b-deep-dive--agent-to-tool-authentication-patterns) |
@@ -83,7 +88,7 @@ Hands-on walkthroughs from three [TechTrapture YouTube](https://youtube.com/@tec
 
 - Scope comes straight from the official exam guide's sections and in-scope tool list, weighted by what stood out in the beta exam.
 - Content is researched against official Google documentation (docs.cloud.google.com, adk.dev, antigravity.google) and the ADK docs.
-- Anything that could not be confirmed in the docs is marked **(unverified)** in the chapters and collected in [Section 6.4](sections/06-cheat-sheet.md#64-items-flagged-unverified-by-research-dont-over-invest).
+- Anything that could not be confirmed in the docs is marked **(unverified)** in the chapters and collected in [Section 6.5](sections/06-cheat-sheet.md#65-items-flagged-unverified-by-research-dont-over-invest).
 
 > **Not affiliated with Google.** This is an independent study resource. Google Cloud products change quickly — always confirm details against the current [official documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/overview) and the exam guide on [Google Cloud certification](https://cloud.google.com/learn/certification).
 

@@ -371,6 +371,7 @@ globs: "*.proto, **/*.pb.go"                        # required for glob
 **Extensions (two meanings; the exam may use either)**
 1. **Antigravity IDE extensions** put the Antigravity agent inside VS Code (≥1.90), Visual Studio 2026, JetBrains (2026.2.1+), Zed, or Xcode. They auto-install the local `agy` backend. **Enterprise sign-in** (Gemini Enterprise) is supported on Antigravity 2.0, the CLI, and IDE extensions, with JetBrains/Zed/Xcode in Preview. The **standalone Antigravity IDE is not supported for enterprise**.
 2. **Gemini CLI extensions** (`gemini-extension.json` with `mcpServers`, `contextFileName`, `excludeTools`, `settings[]` with `envVar`/`sensitive` stored in the keychain, and `commands/*.toml`, `hooks/hooks.json`, `skills/`, `agents/`). In Antigravity these are **plugins**. Convert them with `agy plugin import gemini`, which turns legacy commands into skills.
+
 - Separately, **Agents CLI extensions** (`agents-cli-extension.yaml`, `agents-cli extension add|list|remove|update`) override or add agents-cli commands, for example an org deploy policy or another framework. Experimental.
 
 **When to use which**
@@ -782,129 +783,165 @@ fi
 ### Practice questions
 
 **Q1.** Your platform team wants every developer's Antigravity agent to query BigQuery and Spanner through Google's remote MCP servers. Security prohibits storing any long-lived secrets on laptops, and access must respect each developer's IAM grants. What should you configure?
-A. `headers: {"Authorization": "Bearer <SA key token>"}` in `~/.gemini/config/mcp_config.json`
-B. `serverUrl` with `authProviderType: "google_credentials"` in a committed `.agents/mcp_config.json`, with developers using `gcloud auth application-default login`
-C. `url` with an OAuth client ID and secret per server
-D. A shared service account key referenced through `env` in a stdio MCP wrapper
+
+- **A.** `headers: {"Authorization": "Bearer <SA key token>"}` in `~/.gemini/config/mcp_config.json`
+- **B.** `serverUrl` with `authProviderType: "google_credentials"` in a committed `.agents/mcp_config.json`, with developers using `gcloud auth application-default login`
+- **C.** `url` with an OAuth client ID and secret per server
+- **D.** A shared service account key referenced through `env` in a stdio MCP wrapper
+
 **Answer: B.** ADC reuses each developer's identity and IAM with no stored secret, and the workspace file distributes the config. A and D put long-lived credentials on disk and collapse everyone onto one identity. C uses the unsupported `url` field, and OAuth client secrets are unnecessary for Google Cloud servers that accept ADC.
 
 **Q2.** A fintech runs an ADK agent that includes a "code interpreter" tool executing Python the LLM writes. The tool must start in under a second per session, must not reach the Kubernetes API, and must isolate the host kernel. What is the best design?
-A. Cloud Run jobs with the default compute service account
-B. GKE Agent Sandbox: a gVisor `SandboxTemplate` with `automountServiceAccountToken: false`, a `SandboxWarmPool`, and a `SandboxClaim` per session
-C. GKE Standard pods with `privileged: true` inside a dedicated namespace
-D. Cloud Workstations with Turbo preset
+
+- **A.** Cloud Run jobs with the default compute service account
+- **B.** GKE Agent Sandbox: a gVisor `SandboxTemplate` with `automountServiceAccountToken: false`, a `SandboxWarmPool`, and a `SandboxClaim` per session
+- **C.** GKE Standard pods with `privileged: true` inside a dedicated namespace
+- **D.** Cloud Workstations with Turbo preset
+
 **Answer: B.** gVisor provides kernel-level isolation, warm pools deliver sub-second claims, and the admission policy *requires* no SA token. A lacks a warm, sandboxed claim model and uses an over-privileged default SA. C violates the prohibited-config list. D is a developer environment, not a multi-tenant execution runtime.
 
 **Q3.** A team added `.agents/rules/frontend/react.md` with `trigger: alwaysOn`. The agent ignores it. What are the two root causes?
-A. The rule exceeds 12,000 characters, and rules need a `name` field
-B. The file is nested in a subdirectory (flat scan) and `alwaysOn` is an invalid trigger (it must be `always_on`)
-C. Rules only load from `~/.gemini/config/rules/`, and require `/rules reload`
-D. React rules must be skills
+
+- **A.** The rule exceeds 12,000 characters, and rules need a `name` field
+- **B.** The file is nested in a subdirectory (flat scan) and `alwaysOn` is an invalid trigger (it must be `always_on`)
+- **C.** Rules only load from `~/.gemini/config/rules/`, and require `/rules reload`
+- **D.** React rules must be skills
+
 **Answer: B.** `.agents/rules/` is scanned flat unless the file is registered in `.agents/rules.json`, and an invalid camelCase trigger is silently discarded. The 12,000-character limit belongs to legacy workflows, and rules don't need `name`. Workspace rules are fully supported.
 
 **Q4.** Compliance requires that no agent in the repo can run `terraform apply` or `gcloud … delete`, regardless of prompts or model behavior, and that every blocked attempt is logged to an internal endpoint. What should you use?
-A. An `AGENTS.md` rule stating "never run terraform apply"
-B. A skill named `safe-infra` describing the approved process
-C. A `PreToolUse` hook on `run_command` in `.agents/hooks.json` that logs and returns `{"decision":"deny"}` for those patterns (optionally with matching `deny` permission rules)
-D. A subagent with `model: pro`
+
+- **A.** An `AGENTS.md` rule stating "never run terraform apply"
+- **B.** A skill named `safe-infra` describing the approved process
+- **C.** A `PreToolUse` hook on `run_command` in `.agents/hooks.json` that logs and returns `{"decision":"deny"}` for those patterns (optionally with matching `deny` permission rules)
+- **D.** A subagent with `model: pro`
+
 **Answer: C.** Hooks and permission denies are deterministic and can run logging code, while rules and skills are advisory prompt content. A model tier doesn't enforce anything.
 
 **Q5.** 300 engineers will use Claude Code through Agent Platform. Finance wants predictable per-token cost and platform wants controlled upgrades. Some models aren't served on the `global` endpoint. Which configuration fits best?
-A. `CLAUDE_CODE_USE_VERTEX=1`, `CLOUD_ML_REGION=global`, `ANTHROPIC_VERTEX_PROJECT_ID`, pinned `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, and `VERTEX_REGION_CLAUDE_<MODEL>` for regional-only models
-B. Use the `opus` alias so users always get the newest model
-C. An Anthropic API key per developer with a spending cap
-D. `CLOUD_ML_REGION=us-east5` and grant `roles/aiplatform.admin`
+
+- **A.** `CLAUDE_CODE_USE_VERTEX=1`, `CLOUD_ML_REGION=global`, `ANTHROPIC_VERTEX_PROJECT_ID`, pinned `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, and `VERTEX_REGION_CLAUDE_<MODEL>` for regional-only models
+- **B.** Use the `opus` alias so users always get the newest model
+- **C.** An Anthropic API key per developer with a spending cap
+- **D.** `CLOUD_ML_REGION=us-east5` and grant `roles/aiplatform.admin`
+
 **Answer: A.** Pinning controls both cost and upgrade timing, `global` improves availability, and per-model region overrides cover the gaps. B drifts cost and model. C leaves GCP governance and billing. D is over-privileged (`aiplatform.user` suffices) and forgoes global availability.
 
 **Q6.** A regulated bank wants developers to use AI coding agents, but source code must never leave its perimeter, direct internet egress is forbidden except for an approved package mirror, and SSH to VMs must be auditable through IAM. What should you choose?
-A. Antigravity 2.0 on laptops with the Default preset
-B. Cloud Workstations: private cluster with PSC, a VPC-SC perimeter (restricting both the Workstations and Compute Engine APIs), public IPs disabled, Secure Web Proxy allowlisting the mirror, and `--disable-ssh-to-vm`
-C. GKE Agent Sandbox for each developer
-D. Cloud Shell with Gemini CLI
+
+- **A.** Antigravity 2.0 on laptops with the Default preset
+- **B.** Cloud Workstations: private cluster with PSC, a VPC-SC perimeter (restricting both the Workstations and Compute Engine APIs), public IPs disabled, Secure Web Proxy allowlisting the mirror, and `--disable-ssh-to-vm`
+- **C.** GKE Agent Sandbox for each developer
+- **D.** Cloud Shell with Gemini CLI
+
 **Answer: B.** Each listed control maps to a documented Workstations security practice. A keeps code on endpoints outside the perimeter. C is a code-execution runtime, not a developer IDE platform with gateway SSH controls. D offers no perimeter or egress control.
 
 **Q7.** Your team's coding agent must build a new ADK agent, create an evalset, deploy it to Cloud Run with CI/CD and Terraform, and make it available in Gemini Enterprise. What should you do with the least custom tooling?
-A. Write a custom MCP server that wraps `gcloud run deploy`
-B. Install Agents CLI (`uvx google-agents-cli setup`) and let the agent drive `create`, `eval run`, `scaffold enhance --deployment-target cloud_run`, `infra setup-cicd`, `deploy`, and `publish gemini-enterprise`
-C. Use `adk create` and deploy manually with a Dockerfile
-D. Use `agents-cli create --prototype` and deploy to production
+
+- **A.** Write a custom MCP server that wraps `gcloud run deploy`
+- **B.** Install Agents CLI (`uvx google-agents-cli setup`) and let the agent drive `create`, `eval run`, `scaffold enhance --deployment-target cloud_run`, `infra setup-cicd`, `deploy`, and `publish gemini-enterprise`
+- **C.** Use `adk create` and deploy manually with a Dockerfile
+- **D.** Use `agents-cli create --prototype` and deploy to production
+
 **Answer: B.** Agents CLI skills and commands cover the full lifecycle, including publishing. A reinvents existing tooling. C lacks evals, CI/CD and publishing. D's `--prototype` omits CI/CD and Terraform.
 
 **Q8.** An org has 400 internal skills. Loading them all into every agent's context is too expensive, and security wants immutable, versioned snapshots with central management. ADK agents run on Agent Runtime. What should you use?
-A. Put all skills in `AGENTS.md`
-B. Skill Registry with ADK `SkillToolset(registry=GCPSkillRegistry(...))`, so agents call `search_skills` and `load_skill` on demand, backed by immutable skill revisions
-C. Bake all skills into the container image under `skills/`
-D. One MCP server per skill
+
+- **A.** Put all skills in `AGENTS.md`
+- **B.** Skill Registry with ADK `SkillToolset(registry=GCPSkillRegistry(...))`, so agents call `search_skills` and `load_skill` on demand, backed by immutable skill revisions
+- **C.** Bake all skills into the container image under `skills/`
+- **D.** One MCP server per skill
+
 **Answer: B.** The registry provides on-demand discovery with progressive loading, and revisions are immutable snapshots. A loads everything on every turn. C has no central governance and requires a redeploy per change. D misuses MCP for procedural knowledge and multiplies operational overhead.
 
 **Q9.** A nightly CI job runs `agy -p "fix lint errors and run tests"`. It exits 0, but no tests ran and stderr mentions a tool being denied. What is the best fix?
-A. Add `--dangerously-skip-permissions`
-B. Add scoped rules such as `command(regex:npm run (lint|test))` under `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` for the CI runner
-C. Switch to Turbo preset
-D. Increase `--print-timeout`
+
+- **A.** Add `--dangerously-skip-permissions`
+- **B.** Add scoped rules such as `command(regex:npm run (lint|test))` under `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` for the CI runner
+- **C.** Switch to Turbo preset
+- **D.** Increase `--print-timeout`
+
 **Answer: B.** In headless mode, unapproved tools are soft-denied and the run still exits 0, so pre-granting the exact commands is the least-privilege fix. A and C remove all guardrails. D doesn't address the denial.
 
 **Q10.** Developers on Cloud Workstations run Claude Code and Antigravity CLI for multi-hour refactors, often pausing for review. Workstations keep timing out and losing agent state, and finance objects to raising idle timeouts. What should you do?
-A. Set the idle timeout to 24 hours
-B. Configure `IdleAction.SUSPEND` and install the sample keep-alive hooks (for example Claude Code `UserPromptSubmit` to start and `Notification` to stop `/google/scripts/keep_alive.sh`)
-C. Move developers to GKE Agent Sandbox
-D. Run agents with `nohup` on the workstation
+
+- **A.** Set the idle timeout to 24 hours
+- **B.** Configure `IdleAction.SUSPEND` and install the sample keep-alive hooks (for example Claude Code `UserPromptSubmit` to start and `Notification` to stop `/google/scripts/keep_alive.sh`)
+- **C.** Move developers to GKE Agent Sandbox
+- **D.** Run agents with `nohup` on the workstation
+
 **Answer: B.** Suspend preserves RAM and agent context while stopping compute billing, and the hooks keep the VM alive only during active work. A burns compute while idle. C is the wrong tool for interactive dev environments. D doesn't prevent the idle shutdown.
 
 **Q11.** A team is moving from Gemini CLI to Antigravity CLI. Their repo has ten custom skills in `.gemini/skills/`, and their `GEMINI.md` files are at the repo root and in several service folders. After switching, the rules still apply but none of the skills appear as slash commands. What should they do?
-A. Run `agy plugin import gemini` to convert the skills
-B. Move `.gemini/skills/` to `.agents/skills/` in the repo. The `GEMINI.md` files need no change
-C. Copy the skills into `~/.gemini/config/rules/` so they load globally
-D. Rename every `SKILL.md` to `AGENTS.md`
+
+- **A.** Run `agy plugin import gemini` to convert the skills
+- **B.** Move `.gemini/skills/` to `.agents/skills/` in the repo. The `GEMINI.md` files need no change
+- **C.** Copy the skills into `~/.gemini/config/rules/` so they load globally
+- **D.** Rename every `SKILL.md` to `AGENTS.md`
+
 **Answer: B.** The migration guide says workspace skills must be moved by hand from `.gemini/skills/` to `.agents/skills/`, while `GEMINI.md`/`AGENTS.md` context files work unchanged. A converts *extensions* into plugins, not a repo's skill folder. C turns procedures into rules (and rule files need `trigger` frontmatter). D turns on-demand skills into always-on context.
 
 **Q12.** A platform team wants protobuf conventions (never reuse a field number, always mark deleted fields `reserved`) applied whenever the agent edits `.proto` or generated `.pb.go` files. The conventions must not consume context in other tasks. Which rule file is correct?
-A. `.agents/rules/proto.md` with `trigger: glob` and `globs: "*.proto, **/*.pb.go"`
-B. `.agents/rules/proto.md` with `trigger: always_on`
-C. `.agents/rules/proto/conventions.md` with `trigger: glob` and `globs: *.proto`
-D. `AGENTS.md` at the repo root with a `globs:` frontmatter block
+
+- **A.** `.agents/rules/proto.md` with `trigger: glob` and `globs: "*.proto, **/*.pb.go"`
+- **B.** `.agents/rules/proto.md` with `trigger: always_on`
+- **C.** `.agents/rules/proto/conventions.md` with `trigger: glob` and `globs: *.proto`
+- **D.** `AGENTS.md` at the repo root with a `globs:` frontmatter block
+
 **Answer: A.** A `glob` rule activates only when the agent touches matching files, and the quoted, comma-separated `globs` string is the documented format. B costs tokens on every turn. C is nested (ignored without `rules.json`) and has an unquoted `*` that YAML parses as an alias. D is wrong because `AGENTS.md` takes no frontmatter and is always on.
 
 **Q13.** Internal audit has a 15-page security review rubric. Auditors want the agent to use it only when they explicitly ask for an audit, and it must never load automatically, even if a task looks security-related. What should you configure?
-A. A rule with `trigger: model_decision` and a description mentioning security audits
-B. A rule with `trigger: manual`, which auditors pull in by `@`-mentioning it in chat
-C. A `PreInvocation` hook that injects the rubric as an `ephemeralMessage`
-D. Add the rubric to the global `~/.gemini/GEMINI.md`
+
+- **A.** A rule with `trigger: model_decision` and a description mentioning security audits
+- **B.** A rule with `trigger: manual`, which auditors pull in by `@`-mentioning it in chat
+- **C.** A `PreInvocation` hook that injects the rubric as an `ephemeralMessage`
+- **D.** Add the rubric to the global `~/.gemini/GEMINI.md`
+
 **Answer: B.** `manual` rules are never loaded automatically, only on an explicit `@` mention, and the docs cite audit rubrics as the use case. A lets the model decide to load it. C injects it every turn. D makes it always on across every project and eats into the 20k-token budget.
 
 **Q14.** Agents in a repo often stop and report "done" while unit tests are failing. There is already an `AGENTS.md` rule saying "always run tests before finishing". The team wants a deterministic gate that sends the agent back to work with the failure output, with minimal extra machinery. What should you add?
-A. A `PostToolUse` hook on `write_to_file` that returns `{"decision":"deny"}` when tests fail
-B. A `Stop` hook in `.agents/hooks.json` that runs the tests and, on failure, returns `{"decision":"continue","reason":"<failures>"}`, with a retry cap
-C. Change the rule to `trigger: always_on` with stronger wording
-D. A `PreToolUse` hook on `run_command` that returns `force_ask`
+
+- **A.** A `PostToolUse` hook on `write_to_file` that returns `{"decision":"deny"}` when tests fail
+- **B.** A `Stop` hook in `.agents/hooks.json` that runs the tests and, on failure, returns `{"decision":"continue","reason":"<failures>"}`, with a retry cap
+- **C.** Change the rule to `trigger: always_on` with stronger wording
+- **D.** A `PreToolUse` hook on `run_command` that returns `force_ask`
+
 **Answer: B.** A `Stop` hook with `decision: "continue"` re-enters the loop and injects the reason as a system message, which makes it a deterministic definition-of-done gate. A fails because `PostToolUse` only returns `{}` and cannot block. C is still advisory. D only adds prompts and never checks the test result.
 
 **Q15.** You are porting a Gemini CLI `BeforeTool` hook (defined in `.gemini/settings.json`, `"timeout": 5000`, blocks by exiting with code 2) to Antigravity. Which set of changes is correct?
-A. Keep the file and event name. Antigravity reads Gemini CLI `settings.json` hooks
-B. Move it to `.agents/hooks.json` as `PreToolUse` under a named hook, set `"timeout": 5` (seconds), and block by printing `{"decision":"deny","reason":"…"}` to stdout
-C. Move it to `.agents/rules/hooks.md` with `trigger: always_on`
-D. Move it to `.agents/hooks.json` as `PreInvocation` with a `matcher` and keep `"timeout": 5000`
+
+- **A.** Keep the file and event name. Antigravity reads Gemini CLI `settings.json` hooks
+- **B.** Move it to `.agents/hooks.json` as `PreToolUse` under a named hook, set `"timeout": 5` (seconds), and block by printing `{"decision":"deny","reason":"…"}` to stdout
+- **C.** Move it to `.agents/rules/hooks.md` with `trigger: always_on`
+- **D.** Move it to `.agents/hooks.json` as `PreInvocation` with a `matcher` and keep `"timeout": 5000`
+
 **Answer: B.** Antigravity uses `hooks.json`, the `PreToolUse` event with a regex tool matcher, a timeout in seconds (default 30), and a JSON `decision` for blocking. A is wrong because Gemini CLI hook config is not a documented Antigravity location. C turns enforcement into advisory text. D ignores the matcher on lifecycle events, and 5000 would mean 5000 seconds.
 
 **Q16.** A central platform team must roll out the same four skills, two `glob` rules, a secrets-blocking hook, and a read-only BigQuery MCP server to 300 developers using Antigravity 2.0 and the CLI across 150 repos. Updates must ship as one versioned unit. What is the best approach?
-A. Publish the skills to Skill Registry and ask developers to copy the rest by hand
-B. Package everything as a plugin (`plugin.json` plus `skills/`, `rules/`, `hooks.json`, `mcp_config.json`) and install it globally (`~/.gemini/config/plugins/`, or `agy plugin install <git-url>` for the CLI)
-C. Add a `.agents/rules.json` with `inherits` pointing at a shared repo
-D. Put all the content into one large `AGENTS.md` in every repo
+
+- **A.** Publish the skills to Skill Registry and ask developers to copy the rest by hand
+- **B.** Package everything as a plugin (`plugin.json` plus `skills/`, `rules/`, `hooks.json`, `mcp_config.json`) and install it globally (`~/.gemini/config/plugins/`, or `agy plugin install <git-url>` for the CLI)
+- **C.** Add a `.agents/rules.json` with `inherits` pointing at a shared repo
+- **D.** Put all the content into one large `AGENTS.md` in every repo
+
 **Answer: B.** Plugins are the distribution unit for skills, rules, hooks, MCP servers and agents. A misuses Skill Registry, which serves ADK and runtime agents rather than IDE customization, and it leaves most of the bundle manual. C shares only rules. D can't carry hooks or MCP config and bloats the always-on budget.
 
 **Q17.** You need a security reviewer that can only read code and search, runs in its own context so it doesn't pollute the main conversation, uses the stronger model tier, and runs any shell commands only in the sandbox. The main agent should delegate to it automatically. What should you create?
-A. A skill `.agents/skills/security-review/SKILL.md` describing the review steps
-B. A subagent `.agents/agents/security-reviewer.md` with `description`, `tools: [view_file, grep_search]`, `model: pro`, `commandExecutionPolicy: sandbox`, and `subagent: true`
-C. A rule with `trigger: model_decision` about security reviews
-D. A plugin containing only `plugin.json`
+
+- **A.** A skill `.agents/skills/security-review/SKILL.md` describing the review steps
+- **B.** A subagent `.agents/agents/security-reviewer.md` with `description`, `tools: [view_file, grep_search]`, `model: pro`, `commandExecutionPolicy: sandbox`, and `subagent: true`
+- **C.** A rule with `trigger: model_decision` about security reviews
+- **D.** A plugin containing only `plugin.json`
+
 **Answer: B.** Only a subagent provides context isolation plus a tool allowlist, a model tier and an execution policy, and the planner delegates to it based on `description`. A and C run inside the main agent's context with its full toolset. D carries no behavior. Spell tool names exactly, because a misspelled tool can hang the subagent.
 
 **Q18.** A team has 25 legacy workflows in `.agents/workflows/` and `~/.gemini/config/workflows/`, several of them near the 12,000-character limit, and they want them to keep working after the retirement date. Some workflow names match skills that already exist. What should they do?
-A. Nothing. Workflows remain supported indefinitely
-B. Run `/migrate-workflows` in Antigravity 2.0 to scaffold `.agents/skills/<name>/SKILL.md` for each one (originals are renamed `.bak`), then move embedded scripts into `scripts/`. Where names collide, the existing skill already takes precedence
-C. Convert each workflow to an `always_on` rule
-D. Split each workflow into two files under 6,000 characters
+
+- **A.** Nothing. Workflows remain supported indefinitely
+- **B.** Run `/migrate-workflows` in Antigravity 2.0 to scaffold `.agents/skills/<name>/SKILL.md` for each one (originals are renamed `.bak`), then move embedded scripts into `scripts/`. Where names collide, the existing skill already takes precedence
+- **C.** Convert each workflow to an `always_on` rule
+- **D.** Split each workflow into two files under 6,000 characters
+
 **Answer: B.** Workflows retire on 2026-11-01, and `/migrate-workflows` is the documented path. Skills win name collisions, and moving scripts into the skill bundle keeps `SKILL.md` lean. C loads procedures on every turn. D keeps a deprecated format.
 
 ---

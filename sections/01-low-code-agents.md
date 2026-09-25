@@ -273,82 +273,92 @@ Choose federation for rapidly changing data, data you don't want copied, or quic
 ### Practice questions
 
 **Q1.** A retail bank's HR team (no developers) wants an automation in Gemini Enterprise. When a new-hire email arrives, it should draft onboarding tasks in Jira and schedule calendar invites. A manager must sign off before anything is created. What should you recommend?
-A. A Workflow Builder workflow with an event trigger, a Gemini Agent step, and an Approval human-in-the-loop step
-B. A Workflow Builder chat agent with instructions to "always ask the manager first"
-C. An ADK agent deployed to Agent Runtime and registered in Gemini Enterprise
-D. A CX Agent Studio app with a handoff rule to a "manager" sub-agent
+
+- **A.** A Workflow Builder workflow with an event trigger, a Gemini Agent step, and an Approval human-in-the-loop step
+- **B.** A Workflow Builder chat agent with instructions to "always ask the manager first"
+- **C.** An ADK agent deployed to Agent Runtime and registered in Gemini Enterprise
+- **D.** A CX Agent Studio app with a handoff rule to a "manager" sub-agent
 
 **Answer: A.** Workflows support event triggers and native Approval HITL steps that pause the run ("Needs Review"). B relies on non-deterministic instructions. C needs developers. D is a customer-experience conversational tool, not internal cross-app automation.
 
 **Q2.** A Dialogflow CX agent has a flow-level condition route `$session.params.vip = true → VIP page`. It works on the start page but never fires once the user is on the "Collect address" page. Why?
-A. Conditions are consumed after the first evaluation
-B. Flow-level routes with only a condition requirement are in scope only on the flow start page
-C. Event handlers are evaluated before routes
-D. The flow stack limit of 25 was exceeded
+
+- **A.** Conditions are consumed after the first evaluation
+- **B.** Flow-level routes with only a condition requirement are in scope only on the flow start page
+- **C.** Event handlers are evaluated before routes
+- **D.** The flow stack limit of 25 was exceeded
 
 **Answer: B.** Off the start page, only flow-level *intent* routes are in scope. A is wrong because conditions are not consumed. C is wrong because routes are evaluated before event handlers. D doesn't match the symptom.
 
 **Q3.** In CX Agent Studio, unauthenticated callers must never reach the "Payments" sub-agent, even if they ask convincingly. What is the lowest-effort way to guarantee this?
-A. Add a `<constraints>` rule in the root agent's XML instructions
-B. Add four few-shot examples showing refusals
-C. Configure a handoff rule that blocks transfer to Payments until `is_authenticated == true`
-D. Set the safety guardrail to Strict
+
+- **A.** Add a `<constraints>` rule in the root agent's XML instructions
+- **B.** Add four few-shot examples showing refusals
+- **C.** Configure a handoff rule that blocks transfer to Payments until `is_authenticated == true`
+- **D.** Set the safety guardrail to Strict
 
 **Answer: C.** Handoff rules are the deterministic, no-code control. A and B are non-deterministic. D targets harmful content, not authorization.
 
 **Q4.** A CX agent references a 40 KB product policy on every turn. It rarely changes, and adherence is poor when it's supplied through a tool-updated variable. What should you do?
-A. Make it a static variable `{{policy}}`
-B. Keep it a dynamic variable `{policy}` and add few-shot examples
-C. Move it into a callback that rewrites the user message
-D. Put it in a data store tool
+
+- **A.** Make it a static variable `{{policy}}`
+- **B.** Keep it a dynamic variable `{policy}` and add few-shot examples
+- **C.** Move it into a callback that rewrites the user message
+- **D.** Put it in a data store tool
 
 **Answer: A.** Static variables compile into the prompt and give the best adherence (at the cost of prompt-cache invalidation when updated). B: dynamic variables sit in history, can be trimmed, and have lower adherence. C is hacky. D adds retrieval non-determinism for content that should always be present.
 
 **Q5.** An enterprise uses Okta for SSO and Microsoft 365. It wants the highest-quality Gemini Enterprise answers over complex SharePoint PDFs, with document-level permissions enforced. What is required?
-A. Federated SharePoint connector with Google Identity
-B. Ingestion-mode SharePoint connector, with Workforce Identity Federation configured against Microsoft Entra ID
-C. Ingestion-mode connector with Okta WIF only
-D. Export SharePoint to Cloud Storage and use periodic ingestion
+
+- **A.** Federated SharePoint connector with Google Identity
+- **B.** Ingestion-mode SharePoint connector, with Workforce Identity Federation configured against Microsoft Entra ID
+- **C.** Ingestion-mode connector with Okta WIF only
+- **D.** Export SharePoint to Cloud Storage and use periodic ingestion
 
 **Answer: B.** M365 ingestion requires Entra ID groups via WIF, even if another IdP handles SSO. Ingestion gives full layout parsing. A: federation gives lower quality on complex PDFs. C: Okta alone doesn't satisfy the Entra requirement. D: periodic Cloud Storage ingestion doesn't respect ACLs.
 
 **Q6.** After ingesting a BigQuery table into a Gemini Enterprise data store, analysts see rows they can't query in BigQuery. What is the fix?
-A. Grant `roles/bigquery.dataViewer` more narrowly
-B. Recreate the data store with ACLs enabled and `acl_info` in the data, using one-time ingestion
-C. Toggle "access control" on the existing data store
-D. Switch to periodic ingestion so permissions stay in sync
+
+- **A.** Grant `roles/bigquery.dataViewer` more narrowly
+- **B.** Recreate the data store with ACLs enabled and `acl_info` in the data, using one-time ingestion
+- **C.** Toggle "access control" on the existing data store
+- **D.** Switch to periodic ingestion so permissions stay in sync
 
 **Answer: B.** Source IAM isn't imported, ACLs are set only at creation time, and only one-time ingestion honors ACLs. A has no effect on GE. C can't be done after creation. D ignores ACLs.
 
 **Q7.** A legal team needs to query 3,000 scanned contracts, each 50–900 pages long, with tables and stamps, through Agent Search. Which configuration is best?
-A. Digital parser (the default)
-B. OCR parser with `useNativeText=false`
-C. Layout parser with chunking, table annotation and Gemini layout parsing enabled at data store creation
-D. Upload the files to the Gemini Enterprise chat
+
+- **A.** Digital parser (the default)
+- **B.** OCR parser with `useNativeText=false`
+- **C.** Layout parser with chunking, table annotation and Gemini layout parsing enabled at data store creation
+- **D.** Upload the files to the Gemini Enterprise chat
 
 **Answer: C.** The layout parser is recommended for complex scanned PDFs with tables, and chunking is required. A misses scanned text. B processes only the first 500 pages and ignores structure. D is ad hoc with no index or ACLs.
 
 **Q8.** A company wants its agent to answer questions about hour-long recorded town halls stored in Cloud Storage, while minimizing per-query token cost. What should it do?
-A. Put the MP4 files in an unstructured Agent Search data store
-B. Create a media data store
-C. Pre-process with Gemini (a low-FPS or agentic video pass) into timestamped transcripts and chapters, then ingest those text documents with ACLs into a data store
-D. Send the full video at 5 FPS with every question
+
+- **A.** Put the MP4 files in an unstructured Agent Search data store
+- **B.** Create a media data store
+- **C.** Pre-process with Gemini (a low-FPS or agentic video pass) into timestamped transcripts and chapters, then ingest those text documents with ACLs into a data store
+- **D.** Send the full video at 5 FPS with every question
 
 **Answer: C.** Derived text is cheap to retrieve and ACL-aware. A: MP4 isn't a supported unstructured type. B indexes metadata only. D maximizes token cost.
 
 **Q9.** A developer builds an agent in Agent Studio on Agent Platform that must search an existing Agent Search data store. The legacy "Vertex AI Search Data Store" tool is read-only. What should they do?
-A. Recreate the agent in Workflow Builder
-B. Add the Agent Search MCP server (`discoveryengine.googleapis.com`) from Agent Registry, and make sure the agent identity has the required roles
-C. Upload the documents as knowledge files
-D. Add the data store's URL as a direct MCP endpoint
+
+- **A.** Recreate the agent in Workflow Builder
+- **B.** Add the Agent Search MCP server (`discoveryengine.googleapis.com`) from Agent Registry, and make sure the agent identity has the required roles
+- **C.** Upload the documents as knowledge files
+- **D.** Add the data store's URL as a direct MCP endpoint
 
 **Answer: B.** Agent Studio deprecated direct data store and direct MCP tools in favor of Agent Registry MCP servers, with auth through the agent identity. C is limited to 10 files of 2 MB, PDF or text. D is also deprecated. A switches surface for no reason.
 
 **Q10.** Your team's CX Agent Studio callback must look up a customer in an on-prem CRM reachable only over Private Service Connect. The callback times out. What is the best fix?
-A. Increase the callback timeout
-B. Move the lookup into an OpenAPI or MCP tool that supports private network access, and set the result into a variable
-C. Configure Service Directory for the callback
-D. Use a static variable containing the CRM data
+
+- **A.** Increase the callback timeout
+- **B.** Move the lookup into an OpenAPI or MCP tool that supports private network access, and set the result into a variable
+- **C.** Configure Service Directory for the callback
+- **D.** Use a static variable containing the CRM data
 
 **Answer: B.** Callbacks run in a sandbox without private network access (even with Service Directory configured). OpenAPI and MCP tools support PNA. A doesn't address reachability. C is explicitly not supported for callbacks. D gives stale, non-scalable data.
 

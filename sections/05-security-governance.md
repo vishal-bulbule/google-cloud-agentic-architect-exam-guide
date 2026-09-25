@@ -758,144 +758,184 @@ The ADK safety guidance lists these layers: identity and authorization, in-tool 
 
 ### Practice questions
 
-**1.** A retailer runs 40 ADK agents on Agent Runtime. Security requires that no agent can ever access resources outside the `ai-prod` folder, even if a developer mistakenly grants an agent a role on a finance project. What should you configure?
-A. An IAM deny policy on the finance project denying all permissions to agents
-B. A Principal Access Boundary policy with an ALLOW rule for the `ai-prod` folder, bound to the agent identities' principal set
-C. A VPC-SC perimeter around `ai-prod`
-D. An Agent Gateway Access policy with a DENY rule for finance endpoints
+**Q1.** A retailer runs 40 ADK agents on Agent Runtime. Security requires that no agent can ever access resources outside the `ai-prod` folder, even if a developer mistakenly grants an agent a role on a finance project. What should you configure?
+
+- **A.** An IAM deny policy on the finance project denying all permissions to agents
+- **B.** A Principal Access Boundary policy with an ALLOW rule for the `ai-prod` folder, bound to the agent identities' principal set
+- **C.** A VPC-SC perimeter around `ai-prod`
+- **D.** An Agent Gateway Access policy with a DENY rule for finance endpoints
+
 **Answer: B.** PAB defines which resources a principal set is *eligible* to access, whatever allow policies say. A deny on one project (A) doesn't cover other resources outside the folder. VPC-SC (C) is about data-perimeter context, not identity eligibility. Gateway policies (D) govern only gateway-mediated traffic.
 
-**2.** An agent must read support tickets through an internal MCP server but must never call `deleteTicket` or `updateTicket`. The MCP server is registered in Agent Registry and traffic flows through Agent Gateway. What is the most precise control?
-A. Remove the delete/update tools from the agent's instruction
-B. An IAM Unified Access Policy with an ALLOW rule on the MCP server and a DENY rule where `destination.agent_registry.mcp_server.tool.name in ['deleteTicket','updateTicket']`
-C. An IAM deny policy on the project denying `aiplatform.*`
-D. A Model Armor template with the dangerous-content filter at HIGH
+**Q2.** An agent must read support tickets through an internal MCP server but must never call `deleteTicket` or `updateTicket`. The MCP server is registered in Agent Registry and traffic flows through Agent Gateway. What is the most precise control?
+
+- **A.** Remove the delete/update tools from the agent's instruction
+- **B.** An IAM Unified Access Policy with an ALLOW rule on the MCP server and a DENY rule where `destination.agent_registry.mcp_server.tool.name in ['deleteTicket','updateTicket']`
+- **C.** An IAM deny policy on the project denying `aiplatform.*`
+- **D.** A Model Armor template with the dangerous-content filter at HIGH
+
 **Answer: B.** Access policies evaluated by IAP understand MCP tool names and annotations, and deny rules override allow. Instructions (A) aren't enforcement. C is far too broad. Model Armor (D) classifies content, not authorization.
 
-**3.** After binding an existing Agent Runtime agent to a new Agent Gateway in ENFORCE mode, every invocation fails with HTTP 498. What is the most likely cause?
-A. The Model Armor template is in a different region
-B. Essential platform endpoints (aiplatform, logging, telemetry, and so on, including mTLS and regional variants) aren't registered and allowed for the agent
-C. The agent lacks `roles/run.invoker`
-D. CAA blocked the agent's token
+**Q3.** After binding an existing Agent Runtime agent to a new Agent Gateway in ENFORCE mode, every invocation fails with HTTP 498. What is the most likely cause?
+
+- **A.** The Model Armor template is in a different region
+- **B.** Essential platform endpoints (aiplatform, logging, telemetry, and so on, including mTLS and regional variants) aren't registered and allowed for the agent
+- **C.** The agent lacks `roles/run.invoker`
+- **D.** CAA blocked the agent's token
+
 **Answer: B.** An enforcing gateway routes all egress, including Sessions/platform calls, and is default-deny with exact hostname matching. Allowlist the essential APIs first, or keep IAP in DRY_RUN until that's done.
 
-**4.** A new egress governance policy must be validated in staging without blocking any agent traffic, and you need evidence of what would have been blocked. What do you do?
-A. Set `iamEnforcementMode: "DRY_RUN"` in the IAP authz extension metadata and review IAP entries in Cloud Audit Logs
-B. Deploy the gateway without an authz policy
-C. Set Model Armor to INSPECT_ONLY
-D. Disable CAA with `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`
+**Q4.** A new egress governance policy must be validated in staging without blocking any agent traffic, and you need evidence of what would have been blocked. What do you do?
+
+- **A.** Set `iamEnforcementMode: "DRY_RUN"` in the IAP authz extension metadata and review IAP entries in Cloud Audit Logs
+- **B.** Deploy the gateway without an authz policy
+- **C.** Set Model Armor to INSPECT_ONLY
+- **D.** Disable CAA with `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`
+
 **Answer: A.** In dry-run, IAP logs disallowed communications to Cloud Audit Logs (filter `metadata.iamEnforcementMode="DRY_RUN"`) without blocking. C covers content findings only, not access decisions.
 
-**5.** An agent needs to create Jira issues *as the requesting employee*, so that Jira's own permissions apply and the audit trail shows the user. What is the recommended approach?
-A. Store a Jira admin API key in Secret Manager and read it in the tool
-B. Configure a 3-legged OAuth auth provider in Agent Identity auth manager, grant the agent `roles/agentidentity.user` on it, and attach it through `GcpAuthProviderScheme` (with `continue_uri`)
-C. A 2-legged OAuth auth provider
-D. Grant the agent identity a Jira role via IAM
+**Q5.** An agent needs to create Jira issues *as the requesting employee*, so that Jira's own permissions apply and the audit trail shows the user. What is the recommended approach?
+
+- **A.** Store a Jira admin API key in Secret Manager and read it in the tool
+- **B.** Configure a 3-legged OAuth auth provider in Agent Identity auth manager, grant the agent `roles/agentidentity.user` on it, and attach it through `GcpAuthProviderScheme` (with `continue_uri`)
+- **C.** A 2-legged OAuth auth provider
+- **D.** Grant the agent identity a Jira role via IAM
+
 **Answer: B.** 3LO gives user-delegated authority with consent, a vault, and refresh. ADK surfaces `adk_request_credential`, and audit attributes access to both agent and user. A and C act as the agent, not the user. Jira isn't governed by Google IAM (D).
 
-**6.** A CI/CD pipeline deletes and re-creates an Agent Runtime agent on every release. After each release the agent gets 403s on BigQuery even though the Terraform grants haven't changed. What fixes this most robustly?
-A. Switch the agent back to a service account
-B. Grant baseline roles to the project `principalSet://...attribute.platformContainer/aiplatform/projects/PROJ_NUM`, and bind sensitive roles post-deploy to the new principal from `spec.effectiveIdentity`
-C. Disable CAA
-D. Add the agent to Agent Registry
+**Q6.** A CI/CD pipeline deletes and re-creates an Agent Runtime agent on every release. After each release the agent gets 403s on BigQuery even though the Terraform grants haven't changed. What fixes this most robustly?
+
+- **A.** Switch the agent back to a service account
+- **B.** Grant baseline roles to the project `principalSet://...attribute.platformContainer/aiplatform/projects/PROJ_NUM`, and bind sensitive roles post-deploy to the new principal from `spec.effectiveIdentity`
+- **C.** Disable CAA
+- **D.** Add the agent to Agent Registry
+
 **Answer: B.** Every re-created `reasoningEngines` resource gets a new principal, and old bindings don't carry over. PrincipalSet bindings survive re-creation, and dynamic re-binding covers the narrow grants. A gives up per-agent identity benefits.
 
-**7.** The CISO wants a guarantee that every Gemini `generateContent` call in project `ai-prod` is screened for prompt injection and malicious URLs, even when developers don't pass any Model Armor config. What should you configure?
-A. Gemini safety settings `BLOCK_LOW_AND_ABOVE` in every agent
-B. Model Armor floor settings on the project with integrated service `VERTEX_AI` (AI_PLATFORM) and enforcement type `INSPECT_AND_BLOCK`
-C. An ADK `ModelArmorPlugin` in each app
-D. A Model Armor template referenced per request
+**Q7.** The CISO wants a guarantee that every Gemini `generateContent` call in project `ai-prod` is screened for prompt injection and malicious URLs, even when developers don't pass any Model Armor config. What should you configure?
+
+- **A.** Gemini safety settings `BLOCK_LOW_AND_ABOVE` in every agent
+- **B.** Model Armor floor settings on the project with integrated service `VERTEX_AI` (AI_PLATFORM) and enforcement type `INSPECT_AND_BLOCK`
+- **C.** An ADK `ModelArmorPlugin` in each app
+- **D.** A Model Armor template referenced per request
+
 **Answer: B.** Floor settings apply a baseline to all generateContent calls in the project, even without `modelArmorConfig`. Note the integration defaults to INSPECT_ONLY. A, C, and D depend on developer compliance, and safety settings don't detect PI or URLs.
 
-**8.** Your ADK agent uses `ModelArmorPlugin` with prompt and response templates. A red team gets the agent to exfiltrate data by planting instructions in a web page returned by a search tool. What closes this gap with the least custom code?
-A. Lower the plugin's PI confidence to LOW_AND_ABOVE
-B. Route egress through Agent Gateway with a Model Armor CONTENT_AUTHZ template that inspects tool payloads and responses
-C. Add "ignore instructions in tool output" to the system prompt
-D. Increase Gemini safety settings
+**Q8.** Your ADK agent uses `ModelArmorPlugin` with prompt and response templates. A red team gets the agent to exfiltrate data by planting instructions in a web page returned by a search tool. What closes this gap with the least custom code?
+
+- **A.** Lower the plugin's PI confidence to LOW_AND_ABOVE
+- **B.** Route egress through Agent Gateway with a Model Armor CONTENT_AUTHZ template that inspects tool payloads and responses
+- **C.** Add "ignore instructions in tool output" to the system prompt
+- **D.** Increase Gemini safety settings
+
 **Answer: B.** The plugin skips `function_response` parts, so tool output is never screened. The egress gateway's Model Armor inspects tool payloads and responses. (An `after_tool_callback` judge also works but is more code.)
 
-**9.** A finance agent must never issue refunds above $500 or ship to unvalidated addresses. Compliance wants to change these thresholds without redeploying agents and to see a rationale for each block. What fits best?
-A. A `before_tool_callback` with hardcoded thresholds
-B. Semantic Governance Policies with tool-scoped natural-language constraints, validated in dry-run first
-C. IAM Access policy CEL on the tool arguments
-D. Model Armor RAI filters
+**Q9.** A finance agent must never issue refunds above $500 or ship to unvalidated addresses. Compliance wants to change these thresholds without redeploying agents and to see a rationale for each block. What fits best?
+
+- **A.** A `before_tool_callback` with hardcoded thresholds
+- **B.** Semantic Governance Policies with tool-scoped natural-language constraints, validated in dry-run first
+- **C.** IAM Access policy CEL on the tool arguments
+- **D.** Model Armor RAI filters
+
 **Answer: B.** SGP evaluates proposed tool calls against plain-language business rules at the gateway, with no redeploy, and returns ALLOW/DENY with a rationale. The trade-off is that it is a probabilistic LLM judge, so use dry-run first and keep a deterministic check for hard limits. A requires a redeploy. Access-policy CEL (C) has no tool-argument attributes.
 
-**10.** A reimbursement tool must pause for manager approval when the amount exceeds $1,000. The agent runs locally with `InMemorySessionService` and later on Agent Runtime with `VertexAiSessionService`. What is the concern with using `FunctionTool(reimburse, require_confirmation=threshold_fn)`?
-A. `require_confirmation` only accepts booleans
-B. Tool Confirmation is experimental and doesn't support `VertexAiSessionService`/`DatabaseSessionService`, so production needs another HITL pattern (e.g. `LongRunningFunctionTool` or a graph `RequestInput`)
-C. It only works in TypeScript
-D. It requires Agent Gateway
+**Q10.** A reimbursement tool must pause for manager approval when the amount exceeds $1,000. The agent runs locally with `InMemorySessionService` and later on Agent Runtime with `VertexAiSessionService`. What is the concern with using `FunctionTool(reimburse, require_confirmation=threshold_fn)`?
+
+- **A.** `require_confirmation` only accepts booleans
+- **B.** Tool Confirmation is experimental and doesn't support `VertexAiSessionService`/`DatabaseSessionService`, so production needs another HITL pattern (e.g. `LongRunningFunctionTool` or a graph `RequestInput`)
+- **C.** It only works in TypeScript
+- **D.** It requires Agent Gateway
+
 **Answer: B.** These are documented limitations. `require_confirmation` does accept a predicate, and Python supports it natively.
 
-**11.** A healthcare org puts its Agent Runtime project into a VPC-SC perimeter. Agents deployed last month can still reach the public internet, but new agents can't. Why, and what is the fix for internet-dependent tools?
-A. VPC-SC needs 24h to propagate; wait
-B. Agents deployed before the project joined the perimeter aren't protected, so redeploy them. For required internet egress, use a PSC interface to a proxy VM with Cloud NAT inside the perimeter
-C. Enable Private Google Access
-D. Add the agents to Agent Registry
+**Q11.** A healthcare org puts its Agent Runtime project into a VPC-SC perimeter. Agents deployed last month can still reach the public internet, but new agents can't. Why, and what is the fix for internet-dependent tools?
+
+- **A.** VPC-SC needs 24h to propagate; wait
+- **B.** Agents deployed before the project joined the perimeter aren't protected, so redeploy them. For required internet egress, use a PSC interface to a proxy VM with Cloud NAT inside the perimeter
+- **C.** Enable Private Google Access
+- **D.** Add the agents to Agent Registry
+
 **Answer: B.** The project must be in the perimeter before deployment. Inside VPC-SC, default internet egress is blocked, and the supported path is PSC-I plus a proxy.
 
-**12.** A multi-agent system has an orchestrator on Agent Runtime calling a registered sub-agent over A2A. Calls fail with permission errors even though the developer has `roles/aiplatform.user`. What is the correct remediation?
-A. Grant `roles/agentregistry.viewer` (discovery) and `roles/aiplatform.user` on the sub-agent's reasoning engine to the **orchestrator's agent identity**, and, if egress goes through Agent Gateway, add an Access policy allowing `destination.agent_registry.agent.name` for that sub-agent
-B. Grant `roles/owner` to the developer
-C. Disable IAP on the gateway
-D. Use an API key between agents
+**Q12.** A multi-agent system has an orchestrator on Agent Runtime calling a registered sub-agent over A2A. Calls fail with permission errors even though the developer has `roles/aiplatform.user`. What is the correct remediation?
+
+- **A.** Grant `roles/agentregistry.viewer` (discovery) and `roles/aiplatform.user` on the sub-agent's reasoning engine to the **orchestrator's agent identity**, and, if egress goes through Agent Gateway, add an Access policy allowing `destination.agent_registry.agent.name` for that sub-agent
+- **B.** Grant `roles/owner` to the developer
+- **C.** Disable IAP on the gateway
+- **D.** Use an API key between agents
+
 **Answer: A.** Permissions must go to the calling agent's principal, not the user's. Gateway egress is default-deny, so an explicit agent-to-agent allow rule is also needed.
 
-**13.** An ADK agent on Agent Runtime (Agent Identity enabled) calls a custom MCP server deployed to Cloud Run with `--no-allow-unauthenticated`. Every tool call fails with 403. The agent sends an ID token whose audience is the service's `run.app` URL. What is the most likely fix?
-A. Redeploy the MCP server with `--allow-unauthenticated`
-B. Grant `roles/mcp.toolUser` to the agent on the project
-C. Grant `roles/run.invoker` on the MCP service to the agent's `principal://agents.global.org-…/reasoningEngines/ID`
-D. Store an API key for the MCP server in Secret Manager
+**Q13.** An ADK agent on Agent Runtime (Agent Identity enabled) calls a custom MCP server deployed to Cloud Run with `--no-allow-unauthenticated`. Every tool call fails with 403. The agent sends an ID token whose audience is the service's `run.app` URL. What is the most likely fix?
+
+- **A.** Redeploy the MCP server with `--allow-unauthenticated`
+- **B.** Grant `roles/mcp.toolUser` to the agent on the project
+- **C.** Grant `roles/run.invoker` on the MCP service to the agent's `principal://agents.global.org-…/reasoningEngines/ID`
+- **D.** Store an API key for the MCP server in Secret Manager
+
 **Answer: C.** The token is valid and the audience is right, so the failure is authorization. Cloud Run checks `run.invoker` for the caller's principal. `mcp.toolUser` (B) governs Google's remote MCP servers, not your own. A removes authentication entirely, and D adds a secret that Cloud Run IAM ignores.
 
-**14.** A Cloud Run-hosted A2A agent validates end-user OAuth tokens in the `Authorization` header. The team now wants Cloud Run IAM to also verify that only the Gemini Enterprise service agent can invoke it. How should the IAM token be sent?
-A. In `X-Serverless-Authorization`, with `roles/run.invoker` granted to `service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com`
-B. Concatenated with the user token in `Authorization`
-C. As a query parameter
-D. Replace the user token with the service agent's access token
+**Q14.** A Cloud Run-hosted A2A agent validates end-user OAuth tokens in the `Authorization` header. The team now wants Cloud Run IAM to also verify that only the Gemini Enterprise service agent can invoke it. How should the IAM token be sent?
+
+- **A.** In `X-Serverless-Authorization`, with `roles/run.invoker` granted to `service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com`
+- **B.** Concatenated with the user token in `Authorization`
+- **C.** As a query parameter
+- **D.** Replace the user token with the service agent's access token
+
 **Answer: A.** Cloud Run checks only `X-Serverless-Authorization` when both headers are present, and forwards `Authorization` untouched. Gemini Enterprise does exactly this: a service-agent OIDC token plus the user token. D loses user delegation.
 
-**15.** An agent using the Agent Identity auth manager works in `adk web` but, once deployed to Agent Runtime with the Vertex AI Python SDK, fails at query time with "No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'". What fixes it?
-A. Grant `roles/agentidentity.admin` to the agent
-B. Call `CredentialManager.register_auth_provider(GcpAuthProvider())` inside `set_up()` of an `AdkApp` subclass
-C. Move the auth provider to the `global` location
-D. Recreate the provider with the legacy `connectors` API
+**Q15.** An agent using the Agent Identity auth manager works in `adk web` but, once deployed to Agent Runtime with the Vertex AI Python SDK, fails at query time with "No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'". What fixes it?
+
+- **A.** Grant `roles/agentidentity.admin` to the agent
+- **B.** Call `CredentialManager.register_auth_provider(GcpAuthProvider())` inside `set_up()` of an `AdkApp` subclass
+- **C.** Move the auth provider to the `global` location
+- **D.** Recreate the provider with the legacy `connectors` API
+
 **Answer: B.** The SDK serializes the app, so module-level registration doesn't run in the container. `set_up()` runs at container start. C is wrong because auth providers aren't available in `global`.
 
-**16.** A platform team lets many agents use Google's remote BigQuery MCP server. Security requires that no agent in the org can ever call a tool that modifies data, regardless of granted roles, and there is no Agent Gateway yet. What should you implement?
-A. Remove write tools from each agent's instructions
-B. An org-level IAM deny policy on `mcp.googleapis.com/tools.call` with the condition `api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == false`
-C. A PAB policy limiting agents to read-only datasets
-D. A Model Armor floor setting for `GOOGLE_MCP_SERVER`
+**Q16.** A platform team lets many agents use Google's remote BigQuery MCP server. Security requires that no agent in the org can ever call a tool that modifies data, regardless of granted roles, and there is no Agent Gateway yet. What should you implement?
+
+- **A.** Remove write tools from each agent's instructions
+- **B.** An org-level IAM deny policy on `mcp.googleapis.com/tools.call` with the condition `api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == false`
+- **C.** A PAB policy limiting agents to read-only datasets
+- **D.** A Model Armor floor setting for `GOOGLE_MCP_SERVER`
+
 **Answer: B.** IAM deny policies support MCP attributes (`tool.isReadOnly`, `tool.name`) for the `mcp.tools.call` permission on Google Cloud MCP servers. PAB (C) limits resources, not tool types. Model Armor (D) screens content, and A isn't enforcement. `tools/list` still shows the write tools, but calls to them fail.
 
-**17.** A nightly reconciliation agent pulls opportunities from Salesforce. No user is present, Salesforce supports OAuth client credentials, and security forbids secrets in code or environment variables. What is the recommended approach?
-A. 3-legged OAuth auth provider, with a service user logged in once
-B. 2-legged OAuth auth provider in the auth manager, `roles/agentidentity.user` on it for the agent, referenced with `GcpAuthProviderScheme`
-C. Salesforce password in Secret Manager
-D. Grant the agent identity a Salesforce role in IAM
+**Q17.** A nightly reconciliation agent pulls opportunities from Salesforce. No user is present, Salesforce supports OAuth client credentials, and security forbids secrets in code or environment variables. What is the recommended approach?
+
+- **A.** 3-legged OAuth auth provider, with a service user logged in once
+- **B.** 2-legged OAuth auth provider in the auth manager, `roles/agentidentity.user` on it for the agent, referenced with `GcpAuthProviderScheme`
+- **C.** Salesforce password in Secret Manager
+- **D.** Grant the agent identity a Salesforce role in IAM
+
 **Answer: B.** 2LO is the documented choice for M2M with OAuth-capable services. The vault holds the client secret and ADK injects the tokens. A needs a consenting user, C is basic auth (not recommended), and D doesn't apply because Salesforce isn't governed by Google IAM.
 
-**18.** An ADK agent registered in Gemini Enterprise must query BigQuery **as the signed-in employee**, so that dataset ACLs apply per user. What completes the design?
-A. Grant the agent identity `bigquery.dataViewer` on all datasets
-B. Create an OAuth web client with the Gemini Enterprise redirect URIs, create an authorization resource (`serverSideOauth2`), reference it in `authorizationConfig.toolAuthorizations`, and read the token in the agent through `external_access_token_key="AUTH_ID"`
-C. Use Workload Identity Federation
-D. Pass the user's password to the agent through session state
+**Q18.** An ADK agent registered in Gemini Enterprise must query BigQuery **as the signed-in employee**, so that dataset ACLs apply per user. What completes the design?
+
+- **A.** Grant the agent identity `bigquery.dataViewer` on all datasets
+- **B.** Create an OAuth web client with the Gemini Enterprise redirect URIs, create an authorization resource (`serverSideOauth2`), reference it in `authorizationConfig.toolAuthorizations`, and read the token in the agent through `external_access_token_key="AUTH_ID"`
+- **C.** Use Workload Identity Federation
+- **D.** Pass the user's password to the agent through session state
+
 **Answer: B.** GE runs consent and hands the user token to the agent, so BigQuery enforces that user's IAM. A acts as the agent and removes per-user enforcement, which is the confused-deputy risk. The GE authorization URI should include `access_type=offline` and `prompt=consent`.
 
-**19.** A company runs its agents on GKE Autopilot and wants each agent to call Vertex AI and Cloud Storage without any key files and with per-workload least privilege. What should they use?
-A. Agent Identity with `identity_type=AGENT_IDENTITY`
-B. A service-account JSON key mounted as a Kubernetes Secret
-C. Workload Identity Federation for GKE, granting roles to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA`
-D. The node's default Compute Engine service account
+**Q19.** A company runs its agents on GKE Autopilot and wants each agent to call Vertex AI and Cloud Storage without any key files and with per-workload least privilege. What should they use?
+
+- **A.** Agent Identity with `identity_type=AGENT_IDENTITY`
+- **B.** A service-account JSON key mounted as a Kubernetes Secret
+- **C.** Workload Identity Federation for GKE, granting roles to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA`
+- **D.** The node's default Compute Engine service account
+
 **Answer: C.** Agent Identity is supported on Agent Runtime, Gemini Enterprise, and Cloud Run, not GKE. WIF for GKE gives keyless, per-KSA principals. B and D are key-based or over-shared.
 
-**20.** A 3LO GitHub integration through the auth manager fails at the GitHub step with `redirect_uri_mismatch`. The team registered `https://app.example.com/validateUserId` as the callback in the GitHub OAuth app. What is wrong?
-A. GitHub needs multiple scopes
-B. The GitHub OAuth app must register the auth manager's callback `https://agentidentitycredentials.googleapis.com/v1/projects/P/locations/L/authProviders/NAME/oauthcallback`. `validateUserId` is the `continue_uri` that the user reaches afterwards
-C. The agent lacks `roles/run.invoker`
-D. CAA blocked the redirect
+**Q20.** A 3LO GitHub integration through the auth manager fails at the GitHub step with `redirect_uri_mismatch`. The team registered `https://app.example.com/validateUserId` as the callback in the GitHub OAuth app. What is wrong?
+
+- **A.** GitHub needs multiple scopes
+- **B.** The GitHub OAuth app must register the auth manager's callback `https://agentidentitycredentials.googleapis.com/v1/projects/P/locations/L/authProviders/NAME/oauthcallback`. `validateUserId` is the `continue_uri` that the user reaches afterwards
+- **C.** The agent lacks `roles/run.invoker`
+- **D.** CAA blocked the redirect
+
 **Answer: B.** The auth manager receives the code at its `oauthcallback` and then sends the user to your `continue_uri`, where you call `credentials:finalize`. Note also that GitHub supports only a single scope in the auth manager, which makes A the opposite of the fix.
 
 ---

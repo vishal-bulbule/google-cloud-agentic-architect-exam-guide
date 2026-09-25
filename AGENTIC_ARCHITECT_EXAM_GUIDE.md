@@ -392,82 +392,92 @@ Choose federation for rapidly changing data, data you don't want copied, or quic
 ### Practice questions
 
 **Q1.** A retail bank's HR team (no developers) wants an automation in Gemini Enterprise. When a new-hire email arrives, it should draft onboarding tasks in Jira and schedule calendar invites. A manager must sign off before anything is created. What should you recommend?
-A. A Workflow Builder workflow with an event trigger, a Gemini Agent step, and an Approval human-in-the-loop step
-B. A Workflow Builder chat agent with instructions to "always ask the manager first"
-C. An ADK agent deployed to Agent Runtime and registered in Gemini Enterprise
-D. A CX Agent Studio app with a handoff rule to a "manager" sub-agent
+
+- **A.** A Workflow Builder workflow with an event trigger, a Gemini Agent step, and an Approval human-in-the-loop step
+- **B.** A Workflow Builder chat agent with instructions to "always ask the manager first"
+- **C.** An ADK agent deployed to Agent Runtime and registered in Gemini Enterprise
+- **D.** A CX Agent Studio app with a handoff rule to a "manager" sub-agent
 
 **Answer: A.** Workflows support event triggers and native Approval HITL steps that pause the run ("Needs Review"). B relies on non-deterministic instructions. C needs developers. D is a customer-experience conversational tool, not internal cross-app automation.
 
 **Q2.** A Dialogflow CX agent has a flow-level condition route `$session.params.vip = true → VIP page`. It works on the start page but never fires once the user is on the "Collect address" page. Why?
-A. Conditions are consumed after the first evaluation
-B. Flow-level routes with only a condition requirement are in scope only on the flow start page
-C. Event handlers are evaluated before routes
-D. The flow stack limit of 25 was exceeded
+
+- **A.** Conditions are consumed after the first evaluation
+- **B.** Flow-level routes with only a condition requirement are in scope only on the flow start page
+- **C.** Event handlers are evaluated before routes
+- **D.** The flow stack limit of 25 was exceeded
 
 **Answer: B.** Off the start page, only flow-level *intent* routes are in scope. A is wrong because conditions are not consumed. C is wrong because routes are evaluated before event handlers. D doesn't match the symptom.
 
 **Q3.** In CX Agent Studio, unauthenticated callers must never reach the "Payments" sub-agent, even if they ask convincingly. What is the lowest-effort way to guarantee this?
-A. Add a `<constraints>` rule in the root agent's XML instructions
-B. Add four few-shot examples showing refusals
-C. Configure a handoff rule that blocks transfer to Payments until `is_authenticated == true`
-D. Set the safety guardrail to Strict
+
+- **A.** Add a `<constraints>` rule in the root agent's XML instructions
+- **B.** Add four few-shot examples showing refusals
+- **C.** Configure a handoff rule that blocks transfer to Payments until `is_authenticated == true`
+- **D.** Set the safety guardrail to Strict
 
 **Answer: C.** Handoff rules are the deterministic, no-code control. A and B are non-deterministic. D targets harmful content, not authorization.
 
 **Q4.** A CX agent references a 40 KB product policy on every turn. It rarely changes, and adherence is poor when it's supplied through a tool-updated variable. What should you do?
-A. Make it a static variable `{{policy}}`
-B. Keep it a dynamic variable `{policy}` and add few-shot examples
-C. Move it into a callback that rewrites the user message
-D. Put it in a data store tool
+
+- **A.** Make it a static variable `{{policy}}`
+- **B.** Keep it a dynamic variable `{policy}` and add few-shot examples
+- **C.** Move it into a callback that rewrites the user message
+- **D.** Put it in a data store tool
 
 **Answer: A.** Static variables compile into the prompt and give the best adherence (at the cost of prompt-cache invalidation when updated). B: dynamic variables sit in history, can be trimmed, and have lower adherence. C is hacky. D adds retrieval non-determinism for content that should always be present.
 
 **Q5.** An enterprise uses Okta for SSO and Microsoft 365. It wants the highest-quality Gemini Enterprise answers over complex SharePoint PDFs, with document-level permissions enforced. What is required?
-A. Federated SharePoint connector with Google Identity
-B. Ingestion-mode SharePoint connector, with Workforce Identity Federation configured against Microsoft Entra ID
-C. Ingestion-mode connector with Okta WIF only
-D. Export SharePoint to Cloud Storage and use periodic ingestion
+
+- **A.** Federated SharePoint connector with Google Identity
+- **B.** Ingestion-mode SharePoint connector, with Workforce Identity Federation configured against Microsoft Entra ID
+- **C.** Ingestion-mode connector with Okta WIF only
+- **D.** Export SharePoint to Cloud Storage and use periodic ingestion
 
 **Answer: B.** M365 ingestion requires Entra ID groups via WIF, even if another IdP handles SSO. Ingestion gives full layout parsing. A: federation gives lower quality on complex PDFs. C: Okta alone doesn't satisfy the Entra requirement. D: periodic Cloud Storage ingestion doesn't respect ACLs.
 
 **Q6.** After ingesting a BigQuery table into a Gemini Enterprise data store, analysts see rows they can't query in BigQuery. What is the fix?
-A. Grant `roles/bigquery.dataViewer` more narrowly
-B. Recreate the data store with ACLs enabled and `acl_info` in the data, using one-time ingestion
-C. Toggle "access control" on the existing data store
-D. Switch to periodic ingestion so permissions stay in sync
+
+- **A.** Grant `roles/bigquery.dataViewer` more narrowly
+- **B.** Recreate the data store with ACLs enabled and `acl_info` in the data, using one-time ingestion
+- **C.** Toggle "access control" on the existing data store
+- **D.** Switch to periodic ingestion so permissions stay in sync
 
 **Answer: B.** Source IAM isn't imported, ACLs are set only at creation time, and only one-time ingestion honors ACLs. A has no effect on GE. C can't be done after creation. D ignores ACLs.
 
 **Q7.** A legal team needs to query 3,000 scanned contracts, each 50–900 pages long, with tables and stamps, through Agent Search. Which configuration is best?
-A. Digital parser (the default)
-B. OCR parser with `useNativeText=false`
-C. Layout parser with chunking, table annotation and Gemini layout parsing enabled at data store creation
-D. Upload the files to the Gemini Enterprise chat
+
+- **A.** Digital parser (the default)
+- **B.** OCR parser with `useNativeText=false`
+- **C.** Layout parser with chunking, table annotation and Gemini layout parsing enabled at data store creation
+- **D.** Upload the files to the Gemini Enterprise chat
 
 **Answer: C.** The layout parser is recommended for complex scanned PDFs with tables, and chunking is required. A misses scanned text. B processes only the first 500 pages and ignores structure. D is ad hoc with no index or ACLs.
 
 **Q8.** A company wants its agent to answer questions about hour-long recorded town halls stored in Cloud Storage, while minimizing per-query token cost. What should it do?
-A. Put the MP4 files in an unstructured Agent Search data store
-B. Create a media data store
-C. Pre-process with Gemini (a low-FPS or agentic video pass) into timestamped transcripts and chapters, then ingest those text documents with ACLs into a data store
-D. Send the full video at 5 FPS with every question
+
+- **A.** Put the MP4 files in an unstructured Agent Search data store
+- **B.** Create a media data store
+- **C.** Pre-process with Gemini (a low-FPS or agentic video pass) into timestamped transcripts and chapters, then ingest those text documents with ACLs into a data store
+- **D.** Send the full video at 5 FPS with every question
 
 **Answer: C.** Derived text is cheap to retrieve and ACL-aware. A: MP4 isn't a supported unstructured type. B indexes metadata only. D maximizes token cost.
 
 **Q9.** A developer builds an agent in Agent Studio on Agent Platform that must search an existing Agent Search data store. The legacy "Vertex AI Search Data Store" tool is read-only. What should they do?
-A. Recreate the agent in Workflow Builder
-B. Add the Agent Search MCP server (`discoveryengine.googleapis.com`) from Agent Registry, and make sure the agent identity has the required roles
-C. Upload the documents as knowledge files
-D. Add the data store's URL as a direct MCP endpoint
+
+- **A.** Recreate the agent in Workflow Builder
+- **B.** Add the Agent Search MCP server (`discoveryengine.googleapis.com`) from Agent Registry, and make sure the agent identity has the required roles
+- **C.** Upload the documents as knowledge files
+- **D.** Add the data store's URL as a direct MCP endpoint
 
 **Answer: B.** Agent Studio deprecated direct data store and direct MCP tools in favor of Agent Registry MCP servers, with auth through the agent identity. C is limited to 10 files of 2 MB, PDF or text. D is also deprecated. A switches surface for no reason.
 
 **Q10.** Your team's CX Agent Studio callback must look up a customer in an on-prem CRM reachable only over Private Service Connect. The callback times out. What is the best fix?
-A. Increase the callback timeout
-B. Move the lookup into an OpenAPI or MCP tool that supports private network access, and set the result into a variable
-C. Configure Service Directory for the callback
-D. Use a static variable containing the CRM data
+
+- **A.** Increase the callback timeout
+- **B.** Move the lookup into an OpenAPI or MCP tool that supports private network access, and set the result into a variable
+- **C.** Configure Service Directory for the callback
+- **D.** Use a static variable containing the CRM data
 
 **Answer: B.** Callbacks run in a sandbox without private network access (even with Service Directory configured). OpenAPI and MCP tools support PNA. A doesn't address reachability. C is explicitly not supported for callbacks. D gives stale, non-scalable data.
 
@@ -886,6 +896,7 @@ globs: "*.proto, **/*.pb.go"                        # required for glob
 **Extensions (two meanings; the exam may use either)**
 1. **Antigravity IDE extensions** put the Antigravity agent inside VS Code (≥1.90), Visual Studio 2026, JetBrains (2026.2.1+), Zed, or Xcode. They auto-install the local `agy` backend. **Enterprise sign-in** (Gemini Enterprise) is supported on Antigravity 2.0, the CLI, and IDE extensions, with JetBrains/Zed/Xcode in Preview. The **standalone Antigravity IDE is not supported for enterprise**.
 2. **Gemini CLI extensions** (`gemini-extension.json` with `mcpServers`, `contextFileName`, `excludeTools`, `settings[]` with `envVar`/`sensitive` stored in the keychain, and `commands/*.toml`, `hooks/hooks.json`, `skills/`, `agents/`). In Antigravity these are **plugins**. Convert them with `agy plugin import gemini`, which turns legacy commands into skills.
+
 - Separately, **Agents CLI extensions** (`agents-cli-extension.yaml`, `agents-cli extension add|list|remove|update`) override or add agents-cli commands, for example an org deploy policy or another framework. Experimental.
 
 **When to use which**
@@ -1297,129 +1308,165 @@ fi
 ### Practice questions
 
 **Q1.** Your platform team wants every developer's Antigravity agent to query BigQuery and Spanner through Google's remote MCP servers. Security prohibits storing any long-lived secrets on laptops, and access must respect each developer's IAM grants. What should you configure?
-A. `headers: {"Authorization": "Bearer <SA key token>"}` in `~/.gemini/config/mcp_config.json`
-B. `serverUrl` with `authProviderType: "google_credentials"` in a committed `.agents/mcp_config.json`, with developers using `gcloud auth application-default login`
-C. `url` with an OAuth client ID and secret per server
-D. A shared service account key referenced through `env` in a stdio MCP wrapper
+
+- **A.** `headers: {"Authorization": "Bearer <SA key token>"}` in `~/.gemini/config/mcp_config.json`
+- **B.** `serverUrl` with `authProviderType: "google_credentials"` in a committed `.agents/mcp_config.json`, with developers using `gcloud auth application-default login`
+- **C.** `url` with an OAuth client ID and secret per server
+- **D.** A shared service account key referenced through `env` in a stdio MCP wrapper
+
 **Answer: B.** ADC reuses each developer's identity and IAM with no stored secret, and the workspace file distributes the config. A and D put long-lived credentials on disk and collapse everyone onto one identity. C uses the unsupported `url` field, and OAuth client secrets are unnecessary for Google Cloud servers that accept ADC.
 
 **Q2.** A fintech runs an ADK agent that includes a "code interpreter" tool executing Python the LLM writes. The tool must start in under a second per session, must not reach the Kubernetes API, and must isolate the host kernel. What is the best design?
-A. Cloud Run jobs with the default compute service account
-B. GKE Agent Sandbox: a gVisor `SandboxTemplate` with `automountServiceAccountToken: false`, a `SandboxWarmPool`, and a `SandboxClaim` per session
-C. GKE Standard pods with `privileged: true` inside a dedicated namespace
-D. Cloud Workstations with Turbo preset
+
+- **A.** Cloud Run jobs with the default compute service account
+- **B.** GKE Agent Sandbox: a gVisor `SandboxTemplate` with `automountServiceAccountToken: false`, a `SandboxWarmPool`, and a `SandboxClaim` per session
+- **C.** GKE Standard pods with `privileged: true` inside a dedicated namespace
+- **D.** Cloud Workstations with Turbo preset
+
 **Answer: B.** gVisor provides kernel-level isolation, warm pools deliver sub-second claims, and the admission policy *requires* no SA token. A lacks a warm, sandboxed claim model and uses an over-privileged default SA. C violates the prohibited-config list. D is a developer environment, not a multi-tenant execution runtime.
 
 **Q3.** A team added `.agents/rules/frontend/react.md` with `trigger: alwaysOn`. The agent ignores it. What are the two root causes?
-A. The rule exceeds 12,000 characters, and rules need a `name` field
-B. The file is nested in a subdirectory (flat scan) and `alwaysOn` is an invalid trigger (it must be `always_on`)
-C. Rules only load from `~/.gemini/config/rules/`, and require `/rules reload`
-D. React rules must be skills
+
+- **A.** The rule exceeds 12,000 characters, and rules need a `name` field
+- **B.** The file is nested in a subdirectory (flat scan) and `alwaysOn` is an invalid trigger (it must be `always_on`)
+- **C.** Rules only load from `~/.gemini/config/rules/`, and require `/rules reload`
+- **D.** React rules must be skills
+
 **Answer: B.** `.agents/rules/` is scanned flat unless the file is registered in `.agents/rules.json`, and an invalid camelCase trigger is silently discarded. The 12,000-character limit belongs to legacy workflows, and rules don't need `name`. Workspace rules are fully supported.
 
 **Q4.** Compliance requires that no agent in the repo can run `terraform apply` or `gcloud … delete`, regardless of prompts or model behavior, and that every blocked attempt is logged to an internal endpoint. What should you use?
-A. An `AGENTS.md` rule stating "never run terraform apply"
-B. A skill named `safe-infra` describing the approved process
-C. A `PreToolUse` hook on `run_command` in `.agents/hooks.json` that logs and returns `{"decision":"deny"}` for those patterns (optionally with matching `deny` permission rules)
-D. A subagent with `model: pro`
+
+- **A.** An `AGENTS.md` rule stating "never run terraform apply"
+- **B.** A skill named `safe-infra` describing the approved process
+- **C.** A `PreToolUse` hook on `run_command` in `.agents/hooks.json` that logs and returns `{"decision":"deny"}` for those patterns (optionally with matching `deny` permission rules)
+- **D.** A subagent with `model: pro`
+
 **Answer: C.** Hooks and permission denies are deterministic and can run logging code, while rules and skills are advisory prompt content. A model tier doesn't enforce anything.
 
 **Q5.** 300 engineers will use Claude Code through Agent Platform. Finance wants predictable per-token cost and platform wants controlled upgrades. Some models aren't served on the `global` endpoint. Which configuration fits best?
-A. `CLAUDE_CODE_USE_VERTEX=1`, `CLOUD_ML_REGION=global`, `ANTHROPIC_VERTEX_PROJECT_ID`, pinned `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, and `VERTEX_REGION_CLAUDE_<MODEL>` for regional-only models
-B. Use the `opus` alias so users always get the newest model
-C. An Anthropic API key per developer with a spending cap
-D. `CLOUD_ML_REGION=us-east5` and grant `roles/aiplatform.admin`
+
+- **A.** `CLAUDE_CODE_USE_VERTEX=1`, `CLOUD_ML_REGION=global`, `ANTHROPIC_VERTEX_PROJECT_ID`, pinned `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, and `VERTEX_REGION_CLAUDE_<MODEL>` for regional-only models
+- **B.** Use the `opus` alias so users always get the newest model
+- **C.** An Anthropic API key per developer with a spending cap
+- **D.** `CLOUD_ML_REGION=us-east5` and grant `roles/aiplatform.admin`
+
 **Answer: A.** Pinning controls both cost and upgrade timing, `global` improves availability, and per-model region overrides cover the gaps. B drifts cost and model. C leaves GCP governance and billing. D is over-privileged (`aiplatform.user` suffices) and forgoes global availability.
 
 **Q6.** A regulated bank wants developers to use AI coding agents, but source code must never leave its perimeter, direct internet egress is forbidden except for an approved package mirror, and SSH to VMs must be auditable through IAM. What should you choose?
-A. Antigravity 2.0 on laptops with the Default preset
-B. Cloud Workstations: private cluster with PSC, a VPC-SC perimeter (restricting both the Workstations and Compute Engine APIs), public IPs disabled, Secure Web Proxy allowlisting the mirror, and `--disable-ssh-to-vm`
-C. GKE Agent Sandbox for each developer
-D. Cloud Shell with Gemini CLI
+
+- **A.** Antigravity 2.0 on laptops with the Default preset
+- **B.** Cloud Workstations: private cluster with PSC, a VPC-SC perimeter (restricting both the Workstations and Compute Engine APIs), public IPs disabled, Secure Web Proxy allowlisting the mirror, and `--disable-ssh-to-vm`
+- **C.** GKE Agent Sandbox for each developer
+- **D.** Cloud Shell with Gemini CLI
+
 **Answer: B.** Each listed control maps to a documented Workstations security practice. A keeps code on endpoints outside the perimeter. C is a code-execution runtime, not a developer IDE platform with gateway SSH controls. D offers no perimeter or egress control.
 
 **Q7.** Your team's coding agent must build a new ADK agent, create an evalset, deploy it to Cloud Run with CI/CD and Terraform, and make it available in Gemini Enterprise. What should you do with the least custom tooling?
-A. Write a custom MCP server that wraps `gcloud run deploy`
-B. Install Agents CLI (`uvx google-agents-cli setup`) and let the agent drive `create`, `eval run`, `scaffold enhance --deployment-target cloud_run`, `infra setup-cicd`, `deploy`, and `publish gemini-enterprise`
-C. Use `adk create` and deploy manually with a Dockerfile
-D. Use `agents-cli create --prototype` and deploy to production
+
+- **A.** Write a custom MCP server that wraps `gcloud run deploy`
+- **B.** Install Agents CLI (`uvx google-agents-cli setup`) and let the agent drive `create`, `eval run`, `scaffold enhance --deployment-target cloud_run`, `infra setup-cicd`, `deploy`, and `publish gemini-enterprise`
+- **C.** Use `adk create` and deploy manually with a Dockerfile
+- **D.** Use `agents-cli create --prototype` and deploy to production
+
 **Answer: B.** Agents CLI skills and commands cover the full lifecycle, including publishing. A reinvents existing tooling. C lacks evals, CI/CD and publishing. D's `--prototype` omits CI/CD and Terraform.
 
 **Q8.** An org has 400 internal skills. Loading them all into every agent's context is too expensive, and security wants immutable, versioned snapshots with central management. ADK agents run on Agent Runtime. What should you use?
-A. Put all skills in `AGENTS.md`
-B. Skill Registry with ADK `SkillToolset(registry=GCPSkillRegistry(...))`, so agents call `search_skills` and `load_skill` on demand, backed by immutable skill revisions
-C. Bake all skills into the container image under `skills/`
-D. One MCP server per skill
+
+- **A.** Put all skills in `AGENTS.md`
+- **B.** Skill Registry with ADK `SkillToolset(registry=GCPSkillRegistry(...))`, so agents call `search_skills` and `load_skill` on demand, backed by immutable skill revisions
+- **C.** Bake all skills into the container image under `skills/`
+- **D.** One MCP server per skill
+
 **Answer: B.** The registry provides on-demand discovery with progressive loading, and revisions are immutable snapshots. A loads everything on every turn. C has no central governance and requires a redeploy per change. D misuses MCP for procedural knowledge and multiplies operational overhead.
 
 **Q9.** A nightly CI job runs `agy -p "fix lint errors and run tests"`. It exits 0, but no tests ran and stderr mentions a tool being denied. What is the best fix?
-A. Add `--dangerously-skip-permissions`
-B. Add scoped rules such as `command(regex:npm run (lint|test))` under `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` for the CI runner
-C. Switch to Turbo preset
-D. Increase `--print-timeout`
+
+- **A.** Add `--dangerously-skip-permissions`
+- **B.** Add scoped rules such as `command(regex:npm run (lint|test))` under `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` for the CI runner
+- **C.** Switch to Turbo preset
+- **D.** Increase `--print-timeout`
+
 **Answer: B.** In headless mode, unapproved tools are soft-denied and the run still exits 0, so pre-granting the exact commands is the least-privilege fix. A and C remove all guardrails. D doesn't address the denial.
 
 **Q10.** Developers on Cloud Workstations run Claude Code and Antigravity CLI for multi-hour refactors, often pausing for review. Workstations keep timing out and losing agent state, and finance objects to raising idle timeouts. What should you do?
-A. Set the idle timeout to 24 hours
-B. Configure `IdleAction.SUSPEND` and install the sample keep-alive hooks (for example Claude Code `UserPromptSubmit` to start and `Notification` to stop `/google/scripts/keep_alive.sh`)
-C. Move developers to GKE Agent Sandbox
-D. Run agents with `nohup` on the workstation
+
+- **A.** Set the idle timeout to 24 hours
+- **B.** Configure `IdleAction.SUSPEND` and install the sample keep-alive hooks (for example Claude Code `UserPromptSubmit` to start and `Notification` to stop `/google/scripts/keep_alive.sh`)
+- **C.** Move developers to GKE Agent Sandbox
+- **D.** Run agents with `nohup` on the workstation
+
 **Answer: B.** Suspend preserves RAM and agent context while stopping compute billing, and the hooks keep the VM alive only during active work. A burns compute while idle. C is the wrong tool for interactive dev environments. D doesn't prevent the idle shutdown.
 
 **Q11.** A team is moving from Gemini CLI to Antigravity CLI. Their repo has ten custom skills in `.gemini/skills/`, and their `GEMINI.md` files are at the repo root and in several service folders. After switching, the rules still apply but none of the skills appear as slash commands. What should they do?
-A. Run `agy plugin import gemini` to convert the skills
-B. Move `.gemini/skills/` to `.agents/skills/` in the repo. The `GEMINI.md` files need no change
-C. Copy the skills into `~/.gemini/config/rules/` so they load globally
-D. Rename every `SKILL.md` to `AGENTS.md`
+
+- **A.** Run `agy plugin import gemini` to convert the skills
+- **B.** Move `.gemini/skills/` to `.agents/skills/` in the repo. The `GEMINI.md` files need no change
+- **C.** Copy the skills into `~/.gemini/config/rules/` so they load globally
+- **D.** Rename every `SKILL.md` to `AGENTS.md`
+
 **Answer: B.** The migration guide says workspace skills must be moved by hand from `.gemini/skills/` to `.agents/skills/`, while `GEMINI.md`/`AGENTS.md` context files work unchanged. A converts *extensions* into plugins, not a repo's skill folder. C turns procedures into rules (and rule files need `trigger` frontmatter). D turns on-demand skills into always-on context.
 
 **Q12.** A platform team wants protobuf conventions (never reuse a field number, always mark deleted fields `reserved`) applied whenever the agent edits `.proto` or generated `.pb.go` files. The conventions must not consume context in other tasks. Which rule file is correct?
-A. `.agents/rules/proto.md` with `trigger: glob` and `globs: "*.proto, **/*.pb.go"`
-B. `.agents/rules/proto.md` with `trigger: always_on`
-C. `.agents/rules/proto/conventions.md` with `trigger: glob` and `globs: *.proto`
-D. `AGENTS.md` at the repo root with a `globs:` frontmatter block
+
+- **A.** `.agents/rules/proto.md` with `trigger: glob` and `globs: "*.proto, **/*.pb.go"`
+- **B.** `.agents/rules/proto.md` with `trigger: always_on`
+- **C.** `.agents/rules/proto/conventions.md` with `trigger: glob` and `globs: *.proto`
+- **D.** `AGENTS.md` at the repo root with a `globs:` frontmatter block
+
 **Answer: A.** A `glob` rule activates only when the agent touches matching files, and the quoted, comma-separated `globs` string is the documented format. B costs tokens on every turn. C is nested (ignored without `rules.json`) and has an unquoted `*` that YAML parses as an alias. D is wrong because `AGENTS.md` takes no frontmatter and is always on.
 
 **Q13.** Internal audit has a 15-page security review rubric. Auditors want the agent to use it only when they explicitly ask for an audit, and it must never load automatically, even if a task looks security-related. What should you configure?
-A. A rule with `trigger: model_decision` and a description mentioning security audits
-B. A rule with `trigger: manual`, which auditors pull in by `@`-mentioning it in chat
-C. A `PreInvocation` hook that injects the rubric as an `ephemeralMessage`
-D. Add the rubric to the global `~/.gemini/GEMINI.md`
+
+- **A.** A rule with `trigger: model_decision` and a description mentioning security audits
+- **B.** A rule with `trigger: manual`, which auditors pull in by `@`-mentioning it in chat
+- **C.** A `PreInvocation` hook that injects the rubric as an `ephemeralMessage`
+- **D.** Add the rubric to the global `~/.gemini/GEMINI.md`
+
 **Answer: B.** `manual` rules are never loaded automatically, only on an explicit `@` mention, and the docs cite audit rubrics as the use case. A lets the model decide to load it. C injects it every turn. D makes it always on across every project and eats into the 20k-token budget.
 
 **Q14.** Agents in a repo often stop and report "done" while unit tests are failing. There is already an `AGENTS.md` rule saying "always run tests before finishing". The team wants a deterministic gate that sends the agent back to work with the failure output, with minimal extra machinery. What should you add?
-A. A `PostToolUse` hook on `write_to_file` that returns `{"decision":"deny"}` when tests fail
-B. A `Stop` hook in `.agents/hooks.json` that runs the tests and, on failure, returns `{"decision":"continue","reason":"<failures>"}`, with a retry cap
-C. Change the rule to `trigger: always_on` with stronger wording
-D. A `PreToolUse` hook on `run_command` that returns `force_ask`
+
+- **A.** A `PostToolUse` hook on `write_to_file` that returns `{"decision":"deny"}` when tests fail
+- **B.** A `Stop` hook in `.agents/hooks.json` that runs the tests and, on failure, returns `{"decision":"continue","reason":"<failures>"}`, with a retry cap
+- **C.** Change the rule to `trigger: always_on` with stronger wording
+- **D.** A `PreToolUse` hook on `run_command` that returns `force_ask`
+
 **Answer: B.** A `Stop` hook with `decision: "continue"` re-enters the loop and injects the reason as a system message, which makes it a deterministic definition-of-done gate. A fails because `PostToolUse` only returns `{}` and cannot block. C is still advisory. D only adds prompts and never checks the test result.
 
 **Q15.** You are porting a Gemini CLI `BeforeTool` hook (defined in `.gemini/settings.json`, `"timeout": 5000`, blocks by exiting with code 2) to Antigravity. Which set of changes is correct?
-A. Keep the file and event name. Antigravity reads Gemini CLI `settings.json` hooks
-B. Move it to `.agents/hooks.json` as `PreToolUse` under a named hook, set `"timeout": 5` (seconds), and block by printing `{"decision":"deny","reason":"…"}` to stdout
-C. Move it to `.agents/rules/hooks.md` with `trigger: always_on`
-D. Move it to `.agents/hooks.json` as `PreInvocation` with a `matcher` and keep `"timeout": 5000`
+
+- **A.** Keep the file and event name. Antigravity reads Gemini CLI `settings.json` hooks
+- **B.** Move it to `.agents/hooks.json` as `PreToolUse` under a named hook, set `"timeout": 5` (seconds), and block by printing `{"decision":"deny","reason":"…"}` to stdout
+- **C.** Move it to `.agents/rules/hooks.md` with `trigger: always_on`
+- **D.** Move it to `.agents/hooks.json` as `PreInvocation` with a `matcher` and keep `"timeout": 5000`
+
 **Answer: B.** Antigravity uses `hooks.json`, the `PreToolUse` event with a regex tool matcher, a timeout in seconds (default 30), and a JSON `decision` for blocking. A is wrong because Gemini CLI hook config is not a documented Antigravity location. C turns enforcement into advisory text. D ignores the matcher on lifecycle events, and 5000 would mean 5000 seconds.
 
 **Q16.** A central platform team must roll out the same four skills, two `glob` rules, a secrets-blocking hook, and a read-only BigQuery MCP server to 300 developers using Antigravity 2.0 and the CLI across 150 repos. Updates must ship as one versioned unit. What is the best approach?
-A. Publish the skills to Skill Registry and ask developers to copy the rest by hand
-B. Package everything as a plugin (`plugin.json` plus `skills/`, `rules/`, `hooks.json`, `mcp_config.json`) and install it globally (`~/.gemini/config/plugins/`, or `agy plugin install <git-url>` for the CLI)
-C. Add a `.agents/rules.json` with `inherits` pointing at a shared repo
-D. Put all the content into one large `AGENTS.md` in every repo
+
+- **A.** Publish the skills to Skill Registry and ask developers to copy the rest by hand
+- **B.** Package everything as a plugin (`plugin.json` plus `skills/`, `rules/`, `hooks.json`, `mcp_config.json`) and install it globally (`~/.gemini/config/plugins/`, or `agy plugin install <git-url>` for the CLI)
+- **C.** Add a `.agents/rules.json` with `inherits` pointing at a shared repo
+- **D.** Put all the content into one large `AGENTS.md` in every repo
+
 **Answer: B.** Plugins are the distribution unit for skills, rules, hooks, MCP servers and agents. A misuses Skill Registry, which serves ADK and runtime agents rather than IDE customization, and it leaves most of the bundle manual. C shares only rules. D can't carry hooks or MCP config and bloats the always-on budget.
 
 **Q17.** You need a security reviewer that can only read code and search, runs in its own context so it doesn't pollute the main conversation, uses the stronger model tier, and runs any shell commands only in the sandbox. The main agent should delegate to it automatically. What should you create?
-A. A skill `.agents/skills/security-review/SKILL.md` describing the review steps
-B. A subagent `.agents/agents/security-reviewer.md` with `description`, `tools: [view_file, grep_search]`, `model: pro`, `commandExecutionPolicy: sandbox`, and `subagent: true`
-C. A rule with `trigger: model_decision` about security reviews
-D. A plugin containing only `plugin.json`
+
+- **A.** A skill `.agents/skills/security-review/SKILL.md` describing the review steps
+- **B.** A subagent `.agents/agents/security-reviewer.md` with `description`, `tools: [view_file, grep_search]`, `model: pro`, `commandExecutionPolicy: sandbox`, and `subagent: true`
+- **C.** A rule with `trigger: model_decision` about security reviews
+- **D.** A plugin containing only `plugin.json`
+
 **Answer: B.** Only a subagent provides context isolation plus a tool allowlist, a model tier and an execution policy, and the planner delegates to it based on `description`. A and C run inside the main agent's context with its full toolset. D carries no behavior. Spell tool names exactly, because a misspelled tool can hang the subagent.
 
 **Q18.** A team has 25 legacy workflows in `.agents/workflows/` and `~/.gemini/config/workflows/`, several of them near the 12,000-character limit, and they want them to keep working after the retirement date. Some workflow names match skills that already exist. What should they do?
-A. Nothing. Workflows remain supported indefinitely
-B. Run `/migrate-workflows` in Antigravity 2.0 to scaffold `.agents/skills/<name>/SKILL.md` for each one (originals are renamed `.bak`), then move embedded scripts into `scripts/`. Where names collide, the existing skill already takes precedence
-C. Convert each workflow to an `always_on` rule
-D. Split each workflow into two files under 6,000 characters
+
+- **A.** Nothing. Workflows remain supported indefinitely
+- **B.** Run `/migrate-workflows` in Antigravity 2.0 to scaffold `.agents/skills/<name>/SKILL.md` for each one (originals are renamed `.bak`), then move embedded scripts into `scripts/`. Where names collide, the existing skill already takes precedence
+- **C.** Convert each workflow to an `always_on` rule
+- **D.** Split each workflow into two files under 6,000 characters
+
 **Answer: B.** Workflows retire on 2026-11-01, and `/migrate-workflows` is the documented path. Skills win name collisions, and moving scripts into the skill bundle keeps `SKILL.md` lean. C loads procedures on every turn. D keeps a deprecated format.
 
 ---
@@ -2437,187 +2484,210 @@ Rule of thumb from the ADK docs: prompt-based multi-step procedures get *less re
 
 ### Practice questions
 
-**1.** A retail company runs an ADK customer-service agent on Cloud Run with 3–20 instances. Users report the agent "forgets" what they said two messages earlier, intermittently. The code uses `Runner(session_service=InMemorySessionService())`. What is the best fix with the least operational overhead?
-A. Enable Cloud Run session affinity
-B. Switch to `VertexAiSessionService` pointing at an Agent Runtime instance
-C. Store the conversation in `temp:` state
-D. Increase the model context window
+**Q1.** A retail company runs an ADK customer-service agent on Cloud Run with 3–20 instances. Users report the agent "forgets" what they said two messages earlier, intermittently. The code uses `Runner(session_service=InMemorySessionService())`. What is the best fix with the least operational overhead?
+
+- **A.** Enable Cloud Run session affinity
+- **B.** Switch to `VertexAiSessionService` pointing at an Agent Runtime instance
+- **C.** Store the conversation in `temp:` state
+- **D.** Increase the model context window
 
 **Answer: B.** In-memory sessions are per-instance and lost on scale events. Agent Platform Sessions is managed and needs only an Agent Runtime instance (no code deploy). Affinity is best-effort and still loses data on restart. `temp:` is never persisted.
 
-**2.** A travel agent must remember across months that a user prefers aisle seats. It must update that fact when the user later says "actually, window seats now", without keeping contradictory facts. Which approach fits?
-A. Write `user:seat_pref` state from a tool
-B. `VertexAiRagMemoryService` over transcripts
-C. Memory Bank via `VertexAiMemoryBankService`, generating memories from sessions
-D. `memories.create` for every utterance
+**Q2.** A travel agent must remember across months that a user prefers aisle seats. It must update that fact when the user later says "actually, window seats now", without keeping contradictory facts. Which approach fits?
+
+- **A.** Write `user:seat_pref` state from a tool
+- **B.** `VertexAiRagMemoryService` over transcripts
+- **C.** Memory Bank via `VertexAiMemoryBankService`, generating memories from sessions
+- **D.** `memories.create` for every utterance
 
 **Answer: C.** Memory Bank extracts and **consolidates**, resolving contradictions per scope. `user:` state works for one explicit key but gives no semantic recall or extraction. RAG memory returns raw transcripts, contradictions included. `memories.create` skips consolidation.
 
-**3.** A bank must host an open-weight model with its own fine-tuned weights. Traffic is predictable and high volume, and regulators prohibit multi-tenant inference services. The team wants to choose GPU types. Which serving option is best?
-A. Model Garden MaaS
-B. Self-deployed Model Garden endpoint with custom weights on a dedicated endpoint
-C. Gemini Flash-Lite with Provisioned Throughput
-D. LiteLLM pointing at a public API
+**Q3.** A bank must host an open-weight model with its own fine-tuned weights. Traffic is predictable and high volume, and regulators prohibit multi-tenant inference services. The team wants to choose GPU types. Which serving option is best?
+
+- **A.** Model Garden MaaS
+- **B.** Self-deployed Model Garden endpoint with custom weights on a dedicated endpoint
+- **C.** Gemini Flash-Lite with Provisioned Throughput
+- **D.** LiteLLM pointing at a public API
 
 **Answer: B.** Self-deployment fits custom weights, single-tenant or VPC data paths, hardware choice and lower TCO at steady volume. MaaS is serverless and multi-tenant, with no custom weights.
 
-**4.** Your ADK agent calls a Gemma model served by vLLM on GKE through `LiteLlm(model="openai/...", api_base=...)`. It answers in text but never invokes its tools. What is the most likely cause?
-A. Gemma cannot run on GKE
-B. The vLLM server wasn't started with tool calling enabled (`--enable-auto-tool-choice` and a tool-call parser)
-C. LiteLLM doesn't support tools
-D. `output_key` is missing
+**Q4.** Your ADK agent calls a Gemma model served by vLLM on GKE through `LiteLlm(model="openai/...", api_base=...)`. It answers in text but never invokes its tools. What is the most likely cause?
+
+- **A.** Gemma cannot run on GKE
+- **B.** The vLLM server wasn't started with tool calling enabled (`--enable-auto-tool-choice` and a tool-call parser)
+- **C.** LiteLLM doesn't support tools
+- **D.** `output_key` is missing
 
 **Answer: B.** The ADK docs call out enabling OpenAI-compatible tool calling on the serving side. Without it, the model returns plain text.
 
-**5.** An underwriting process must (1) extract fields with an LLM, (2) run a deterministic Python risk score, (3) route to "auto-approve" or "manual review" by score, and (4) pause for a human underwriter on manual review. Auditors need predictable paths. What should you build?
-A. One `LlmAgent` with a detailed instruction
-B. A coordinator `LlmAgent` with sub-agents using `transfer_to_agent`
-C. An ADK graph `Workflow` with a function node, a router `Event(route=...)`, and a `RequestInput` node
-D. A `LoopAgent` with `max_iterations=4`
+**Q5.** An underwriting process must (1) extract fields with an LLM, (2) run a deterministic Python risk score, (3) route to "auto-approve" or "manual review" by score, and (4) pause for a human underwriter on manual review. Auditors need predictable paths. What should you build?
+
+- **A.** One `LlmAgent` with a detailed instruction
+- **B.** A coordinator `LlmAgent` with sub-agents using `transfer_to_agent`
+- **C.** An ADK graph `Workflow` with a function node, a router `Event(route=...)`, and a `RequestInput` node
+- **D.** A `LoopAgent` with `max_iterations=4`
 
 **Answer: C.** Graph workflows mix code and LLM nodes, give explicit routing, and support deterministic HITL through `RequestInput`. LLM-driven transfer is non-deterministic.
 
-**6.** A research agent needs weather, news and stock data, which are independent calls, and then one summary. Latency matters. Which composition is correct?
-A. `SequentialAgent([weather, news, stocks, summarizer])`
-B. `SequentialAgent([ParallelAgent([weather, news, stocks]), summarizer])`, each fetcher with a distinct `output_key`
-C. `ParallelAgent([weather, news, stocks, summarizer])`
-D. `LoopAgent([weather, news, stocks])`
+**Q6.** A research agent needs weather, news and stock data, which are independent calls, and then one summary. Latency matters. Which composition is correct?
+
+- **A.** `SequentialAgent([weather, news, stocks, summarizer])`
+- **B.** `SequentialAgent([ParallelAgent([weather, news, stocks]), summarizer])`, each fetcher with a distinct `output_key`
+- **C.** `ParallelAgent([weather, news, stocks, summarizer])`
+- **D.** `LoopAgent([weather, news, stocks])`
 
 **Answer: B.** Fan-out/gather: the parallel children share state, so each needs a distinct key, and the summariser must run after all three. Option C runs the summariser concurrently with the fetchers.
 
-**7.** An orchestrator must consult a "tax specialist" agent, combine its answer with other findings, and keep talking to the user itself. Which mechanism fits?
-A. Add the specialist to `sub_agents`
-B. Wrap the specialist in `AgentTool` and add it to `tools`
-C. Expose the specialist through A2A even though it's in the same codebase
-D. Put the specialist in a `ParallelAgent`
+**Q7.** An orchestrator must consult a "tax specialist" agent, combine its answer with other findings, and keep talking to the user itself. Which mechanism fits?
+
+- **A.** Add the specialist to `sub_agents`
+- **B.** Wrap the specialist in `AgentTool` and add it to `tools`
+- **C.** Expose the specialist through A2A even though it's in the same codebase
+- **D.** Put the specialist in a `ParallelAgent`
 
 **Answer: B.** `AgentTool` keeps control with the parent and returns the child's result as a tool output. Transfer through `sub_agents` hands the conversation to the specialist. A2A adds needless network overhead for in-process code.
 
-**8.** Security requires that each deployed agent have its own auditable principal, not a shared service account, and that IAM grants exist before the code ships. What should you do?
-A. Create one custom service account per agent and set it at deploy
-B. Create the Agent Runtime instance with only `identity_type=AGENT_IDENTITY`, grant roles to its `principal://…/reasoningEngines/ID`, then `runtimes.update` with code
-C. Use the Reasoning Engine Service Agent and add roles
-D. Grant roles to `allUsers` temporarily
+**Q8.** Security requires that each deployed agent have its own auditable principal, not a shared service account, and that IAM grants exist before the code ships. What should you do?
+
+- **A.** Create one custom service account per agent and set it at deploy
+- **B.** Create the Agent Runtime instance with only `identity_type=AGENT_IDENTITY`, grant roles to its `principal://…/reasoningEngines/ID`, then `runtimes.update` with code
+- **C.** Use the Reasoning Engine Service Agent and add roles
+- **D.** Grant roles to `allUsers` temporarily
 
 **Answer: B.** Agent Identity is per-agent, SPIFFE-based and lifecycle-bound. The docs show creating the identity-only instance first so that IAM can be set before deployment. The service agent is shared across agents.
 
-**9.** After a platform team deleted and redeployed an Agent Runtime agent with the same display name and code, it gets `PERMISSION_DENIED` on a BigQuery dataset it could previously read. Why?
-A. Context-Aware Access blocked it
-B. The new resource has a new resource ID and therefore a new principal; the old bindings reference the deleted identity
-C. BigQuery doesn't support agent identities
-D. The display name must be unique
+**Q9.** After a platform team deleted and redeployed an Agent Runtime agent with the same display name and code, it gets `PERMISSION_DENIED` on a BigQuery dataset it could previously read. Why?
+
+- **A.** Context-Aware Access blocked it
+- **B.** The new resource has a new resource ID and therefore a new principal; the old bindings reference the deleted identity
+- **C.** BigQuery doesn't support agent identities
+- **D.** The display name must be unique
 
 **Answer: B.** An agent identity derives from the resource ID. Old bindings stay as inactive grants and must be re-created for the new principal, and cleaned up.
 
-**10.** Every Agent Runtime agent in a project needs log writing and metric writing. Only the "claims" agent may read the claims dataset. What is the most maintainable IAM design?
-A. Grant `logging.logWriter`, `monitoring.metricWriter` and dataset access to the project principal set
-B. Grant logging/metrics roles to `principalSet://…/attribute.platformContainer/aiplatform/projects/NUM`, and dataset read only to the claims agent's `principal://` identifier
-C. Grant everything to each agent individually
-D. Use a shared custom service account
+**Q10.** Every Agent Runtime agent in a project needs log writing and metric writing. Only the "claims" agent may read the claims dataset. What is the most maintainable IAM design?
+
+- **A.** Grant `logging.logWriter`, `monitoring.metricWriter` and dataset access to the project principal set
+- **B.** Grant logging/metrics roles to `principalSet://…/attribute.platformContainer/aiplatform/projects/NUM`, and dataset read only to the claims agent's `principal://` identifier
+- **C.** Grant everything to each agent individually
+- **D.** Use a shared custom service account
 
 **Answer: B.** The docs recommend broad baseline roles on the principal set and sensitive data roles on the individual agent.
 
-**11.** Engineers search a technical knowledge base by exact part numbers (for example "XR-7741-B"). Semantic-only retrieval in Vector Search 1.0 misses them, but conceptual queries work well. What should they implement?
-A. Switch to COSINE distance
-B. Hybrid index with dense and sparse (BM25) embeddings, merged by RRF with `rrf_ranking_alpha` around 0.5
-C. Increase `chunk_size`
-D. Use the `SEMANTIC_SIMILARITY` task type
+**Q11.** Engineers search a technical knowledge base by exact part numbers (for example "XR-7741-B"). Semantic-only retrieval in Vector Search 1.0 misses them, but conceptual queries work well. What should they implement?
+
+- **A.** Switch to COSINE distance
+- **B.** Hybrid index with dense and sparse (BM25) embeddings, merged by RRF with `rrf_ranking_alpha` around 0.5
+- **C.** Increase `chunk_size`
+- **D.** Use the `SEMANTIC_SIMILARITY` task type
 
 **Answer: B.** Sparse embeddings capture exact tokens and RRF fuses them with semantic results. An alpha of 1 would mean dense only.
 
-**12.** A RAG Engine corpus must use customer-managed encryption keys. The team also wants the managed vector store without operating any database. Which configuration?
-A. Serverless mode (Vector Search 2.0 backend)
-B. Spanner mode with RagManagedDb
-C. Weaviate backend
-D. Vector Search 1.0 backend managed by the team
+**Q12.** A RAG Engine corpus must use customer-managed encryption keys. The team also wants the managed vector store without operating any database. Which configuration?
+
+- **A.** Serverless mode (Vector Search 2.0 backend)
+- **B.** Spanner mode with RagManagedDb
+- **C.** Weaviate backend
+- **D.** Vector Search 1.0 backend managed by the team
 
 **Answer: B.** The docs state that CMEK is supported by RagManagedDb (Spanner mode). Serverless mode and the Vector Search backends don't support CMEK through RAG Engine.
 
-**13.** An ADK agent must let analysts query BigQuery with no extra infrastructure to host, using Google-managed MCP. The agent runs with its own identity. Which permissions does that identity need at minimum?
-A. `roles/mcp.toolUser` plus BigQuery data and job roles on the relevant resources
-B. `roles/owner`
-C. Only `roles/bigquery.dataViewer`
-D. An API key for the MCP endpoint
+**Q13.** An ADK agent must let analysts query BigQuery with no extra infrastructure to host, using Google-managed MCP. The agent runs with its own identity. Which permissions does that identity need at minimum?
+
+- **A.** `roles/mcp.toolUser` plus BigQuery data and job roles on the relevant resources
+- **B.** `roles/owner`
+- **C.** Only `roles/bigquery.dataViewer`
+- **D.** An API key for the MCP endpoint
 
 **Answer: A.** Remote MCP servers need `mcp.tools.call` (MCP Tool User) *and* the product's own permissions. BigQuery's MCP uses OAuth and IAM, not API keys.
 
-**14.** A company has 400 internal skills (SKILL.md packages). Loading them all into every agent's prompt is slow and costly. They also want versioned, centrally governed skills. What should the ADK agent use?
-A. Put all skills in the instruction
-B. `SkillToolset` backed by `GCPSkillRegistry`, so the agent calls `search_skills`/`load_skill` on demand
-C. One `AgentTool` per skill
-D. Agent Config YAML
+**Q14.** A company has 400 internal skills (SKILL.md packages). Loading them all into every agent's prompt is slow and costly. They also want versioned, centrally governed skills. What should the ADK agent use?
+
+- **A.** Put all skills in the instruction
+- **B.** `SkillToolset` backed by `GCPSkillRegistry`, so the agent calls `search_skills`/`load_skill` on demand
+- **C.** One `AgentTool` per skill
+- **D.** Agent Config YAML
 
 **Answer: B.** Skill Registry gives on-demand, targeted retrieval with immutable revisions and a default revision, and keeps the context window small.
 
-**15.** A refund agent is IAM-authorised to call `issue_refund`. Policy says refunds over $100 need a manager, and the rule changes quarterly. Prompt-injection through customer emails is a concern. What is the best control?
-A. Add the rule to the system instruction
-B. A semantic governance policy (natural language constraint) on the `issue_refund` tool, enforced at Agent Gateway
-C. Remove the tool's IAM permission
-D. Lower the model temperature
+**Q15.** A refund agent is IAM-authorised to call `issue_refund`. Policy says refunds over $100 need a manager, and the rule changes quarterly. Prompt-injection through customer emails is a concern. What is the best control?
+
+- **A.** Add the rule to the system instruction
+- **B.** A semantic governance policy (natural language constraint) on the `issue_refund` tool, enforced at Agent Gateway
+- **C.** Remove the tool's IAM permission
+- **D.** Lower the model temperature
 
 **Answer: B.** Semantic governance evaluates each proposed tool call against user intent and constraints, can reference parameters, resists context poisoning, and changes without redeploying. Instructions can be overridden by injected text, and removing IAM access breaks legitimate refunds.
 
-**16.** A logistics company uses a partner's hosted MCP server at `https://mcp.partner.example/mcp`. Orchestrator agents must discover the server and its tools at runtime, and security wants tool-level egress policies at Agent Gateway. What should the platform team do?
-A. Deploy a Cloud Run proxy with `--functional-type=mcp-server` so the partner server is auto-registered
-B. Run `gcloud agent-registry services create` with `--mcp-server-spec-type=tool-spec`, `--mcp-server-spec-content=@toolspec.json` and `--interfaces=url=…,protocolBinding=jsonrpc` in a supported region
-C. Register the URL as an Endpoint with `--endpoint-spec-type=no-spec`
-D. Hard-code the URL in `McpToolset` and rely on the gateway's unregistered-host allow rule
+**Q16.** A logistics company uses a partner's hosted MCP server at `https://mcp.partner.example/mcp`. Orchestrator agents must discover the server and its tools at runtime, and security wants tool-level egress policies at Agent Gateway. What should the platform team do?
+
+- **A.** Deploy a Cloud Run proxy with `--functional-type=mcp-server` so the partner server is auto-registered
+- **B.** Run `gcloud agent-registry services create` with `--mcp-server-spec-type=tool-spec`, `--mcp-server-spec-content=@toolspec.json` and `--interfaces=url=…,protocolBinding=jsonrpc` in a supported region
+- **C.** Register the URL as an Endpoint with `--endpoint-spec-type=no-spec`
+- **D.** Hard-code the URL in `McpToolset` and rely on the gateway's unregistered-host allow rule
 
 **Answer: B.** An external server needs manual registration, and the registry does not introspect it, so you must supply the tool spec for tools to be discoverable and policy-addressable. An Endpoint entry gives only host-level control. An unregistered-host rule can't express tool-level conditions.
 
-**17.** The team added three tools to a manually registered MCP server last week. Agents still can't find them with `search_mcp_servers`, and the console's **Tools** tab shows the old list. What is the fix?
-A. Wait for the registry's nightly re-scan
-B. Patch the `McpServer` resource with the new tools
-C. Run `gcloud agent-registry services update SERVER --mcp-server-spec-content=new-toolspec.json` with the complete tool list
-D. Delete and recreate the auth-provider binding
+**Q17.** The team added three tools to a manually registered MCP server last week. Agents still can't find them with `search_mcp_servers`, and the console's **Tools** tab shows the old list. What is the fix?
+
+- **A.** Wait for the registry's nightly re-scan
+- **B.** Patch the `McpServer` resource with the new tools
+- **C.** Run `gcloud agent-registry services update SERVER --mcp-server-spec-content=new-toolspec.json` with the complete tool list
+- **D.** Delete and recreate the auth-provider binding
 
 **Answer: C.** Manual entries are never re-introspected. You update the writable `Service`, and the uploaded spec **replaces** the existing tool definitions, so it must contain every tool. `McpServer` is read-only.
 
-**18.** An engineer binds an IAP egress policy to the auto-registered BigQuery MCP server with `gcloud iap web set-iam-policy … --resource-type=agent-registry --mcp-server=… --region=us-central1`. It fails with `NOT_FOUND`, although the server appears in the registry. Why?
-A. The BigQuery API isn't enabled
-B. Google-managed remote MCP servers are registered in the `global` location, so the binding must use `--region=global`
-C. Policies can't reference auto-registered servers
-D. The engineer lacks `roles/agentregistry.editor`
+**Q18.** An engineer binds an IAP egress policy to the auto-registered BigQuery MCP server with `gcloud iap web set-iam-policy … --resource-type=agent-registry --mcp-server=… --region=us-central1`. It fails with `NOT_FOUND`, although the server appears in the registry. Why?
+
+- **A.** The BigQuery API isn't enabled
+- **B.** Google-managed remote MCP servers are registered in the `global` location, so the binding must use `--region=global`
+- **C.** Policies can't reference auto-registered servers
+- **D.** The engineer lacks `roles/agentregistry.editor`
 
 **Answer: B.** Google remote MCP servers are auto-registered globally. Regional bindings on them aren't supported and return `NOT_FOUND`. The server is visible, so its API is already enabled.
 
-**19.** A bank runs a central governance project with an egress Agent Gateway in `us-central1`. MCP servers are deployed to Cloud Run in 12 workload projects with `--functional-type=mcp-server`. Agents calling them through the central gateway are denied as unregistered destinations. What is the best fix?
-A. Enable the Agent Registry API in the central project and wait for cross-project auto-discovery
-B. Manually register each MCP server in the central project's registry (in `us-central1` or `global`), grant `roles/iap.egressor` to the agent principals on those entries, and manage the entries' lifecycle
-C. Attach all 12 workload-project registries to the gateway
-D. Switch the gateway to `CLIENT_TO_AGENT` mode
+**Q19.** A bank runs a central governance project with an egress Agent Gateway in `us-central1`. MCP servers are deployed to Cloud Run in 12 workload projects with `--functional-type=mcp-server`. Agents calling them through the central gateway are denied as unregistered destinations. What is the best fix?
+
+- **A.** Enable the Agent Registry API in the central project and wait for cross-project auto-discovery
+- **B.** Manually register each MCP server in the central project's registry (in `us-central1` or `global`), grant `roles/iap.egressor` to the agent principals on those entries, and manage the entries' lifecycle
+- **C.** Attach all 12 workload-project registries to the gateway
+- **D.** Switch the gateway to `CLIENT_TO_AGENT` mode
 
 **Answer: B.** Automatic registration is single-project, so cross-project components must be registered manually in the central registry, aligned by region, and their entries don't auto-update. A gateway attaches at most two registries (one global and one regional). Cross-project governance is egress-only.
 
-**20.** An ADK agent must create Jira issues **as the signed-in employee**, with user consent. No OAuth secrets may appear in code. The Jira MCP server is registered in Agent Registry. What should you implement?
-A. Store a Jira API key in Secret Manager and send it through `header_provider`
-B. Create a 3-legged OAuth auth provider in Agent Identity auth manager, bind it to the agent with `gcloud agent-registry bindings create … --auth-provider=…`, handle `adk_request_credential` in the client, and pass `continue_uri` to `get_mcp_toolset`
-C. Grant the agent identity `roles/mcp.toolUser`
-D. Create a resource binding with `--target-identifier` set to the Jira server's URN
+**Q20.** An ADK agent must create Jira issues **as the signed-in employee**, with user consent. No OAuth secrets may appear in code. The Jira MCP server is registered in Agent Registry. What should you implement?
+
+- **A.** Store a Jira API key in Secret Manager and send it through `header_provider`
+- **B.** Create a 3-legged OAuth auth provider in Agent Identity auth manager, bind it to the agent with `gcloud agent-registry bindings create … --auth-provider=…`, handle `adk_request_credential` in the client, and pass `continue_uri` to `get_mcp_toolset`
+- **C.** Grant the agent identity `roles/mcp.toolUser`
+- **D.** Create a resource binding with `--target-identifier` set to the Jira server's URN
 
 **Answer: B.** Delegated user access is 3LO through the auth manager. The binding lets ADK resolve the provider automatically, and `continue_uri` is where the user returns after consent. An API key acts as the agent, not the user. `mcp.toolUser` only covers Google MCP servers.
 
-**21.** To "speed up onboarding," a platform team grants every agent identity `roles/agentregistry.editor` so that agents can self-register the tools they build. The security review flags this. What is the main risk?
-A. Editors can't search the registry
-B. An agent could modify tool annotations such as `readOnlyHint` or `destructiveHint`, which egress policies rely on, and could enroll a malicious third-party agent or server
-C. Editor exceeds the 100-bindings quota
-D. Editor grants `iap.egressor` implicitly
+**Q21.** To "speed up onboarding," a platform team grants every agent identity `roles/agentregistry.editor` so that agents can self-register the tools they build. The security review flags this. What is the main risk?
+
+- **A.** Editors can't search the registry
+- **B.** An agent could modify tool annotations such as `readOnlyHint` or `destructiveHint`, which egress policies rely on, and could enroll a malicious third-party agent or server
+- **C.** Editor exceeds the 100-bindings quota
+- **D.** Editor grants `iap.egressor` implicitly
 
 **Answer: B.** The docs explicitly warn against giving admin or editor roles to agents, because annotation and metadata tampering can make destructive tools look safe. Agents should hold `agentregistry.viewer`. Editor can't even create bindings (that needs admin).
 
-**22.** A low-code team's Agent Studio agent connects directly to an internal MCP server by URL. After a platform update, the tool is read-only and can't be edited. What should they do?
-A. Recreate the agent in ADK
-B. Register the MCP server in Agent Registry, remove the legacy direct connection, then add it through **Add (+) → MCP Server from Agent Registry** (Location, server, Auth Config)
-C. Re-enter the same URL as a new direct MCP connection
-D. Convert the server to an A2A agent
+**Q22.** A low-code team's Agent Studio agent connects directly to an internal MCP server by URL. After a platform update, the tool is read-only and can't be edited. What should they do?
+
+- **A.** Recreate the agent in ADK
+- **B.** Register the MCP server in Agent Registry, remove the legacy direct connection, then add it through **Add (+) → MCP Server from Agent Registry** (Location, server, Auth Config)
+- **C.** Re-enter the same URL as a new direct MCP connection
+- **D.** Convert the server to an A2A agent
 
 **Answer: B.** Agent Studio has deprecated direct MCP-server connections, and existing ones become read-only, in favor of registered servers. The server must be registered first. The agent then gets all of that server's tools, with access resolved through IAM when Auth Config is `None`.
 
-**23.** A support agent may call any **read-only** tool on the registered `crm-mcp` server, including tools added in the future, but no write tools. The server's tool spec carries accurate MCP annotations. What is the most precise and maintainable control?
-A. List the allowed tool names in the agent's system instruction
-B. Bind an IAP egress allow policy on `crm-mcp` (`gcloud iap web set-iam-policy … --mcp-server=crm-mcp`), granting `roles/iap.egressor` to the agent principal with a CEL condition on the tool's read-only attribute
-C. A Model Armor template with prompt-injection filtering
-D. Remove the write tools from the MCP server's code
+**Q23.** A support agent may call any **read-only** tool on the registered `crm-mcp` server, including tools added in the future, but no write tools. The server's tool spec carries accurate MCP annotations. What is the most precise and maintainable control?
+
+- **A.** List the allowed tool names in the agent's system instruction
+- **B.** Bind an IAP egress allow policy on `crm-mcp` (`gcloud iap web set-iam-policy … --mcp-server=crm-mcp`), granting `roles/iap.egressor` to the agent principal with a CEL condition on the tool's read-only attribute
+- **C.** A Model Armor template with prompt-injection filtering
+- **D.** Remove the write tools from the MCP server's code
 
 **Answer: B.** Egress IAM policies at Agent Gateway can condition on registry tool annotations, so new read-only tools are covered automatically and write tools are denied. Instructions are bypassable. Model Armor inspects content, not tool permissions. Removing tools breaks other consumers.
 
@@ -3125,87 +3195,111 @@ Gotchas:
 ### Practice questions
 
 **Q1.** Your team adds a new tool to an ADK customer-service agent. After the change, answers are still correct, but in 20% of cases the agent calls `lookup_order` twice before responding. You want CI to catch this class of regression cheaply on every pull request. What should you do?
-A. Add `final_response_match_v2` with threshold 0.9 to `test_config.json`.
-B. Add expected `tool_uses` to the `.test.json` cases and gate on `tool_trajectory_avg_score` with `match_type: EXACT` at 1.0.
-C. Enable an online monitor with the Tool Use Quality metric.
-D. Add `response_match_score` at 0.95.
+
+- **A.** Add `final_response_match_v2` with threshold 0.9 to `test_config.json`.
+- **B.** Add expected `tool_uses` to the `.test.json` cases and gate on `tool_trajectory_avg_score` with `match_type: EXACT` at 1.0.
+- **C.** Enable an online monitor with the Tool Use Quality metric.
+- **D.** Add `response_match_score` at 0.95.
+
 **Answer: B.** Duplicate calls are a trajectory defect; `EXACT` fails on extra calls and is deterministic and cheap for CI. Response metrics (A, D) pass because answers are correct; online monitors (C) find it only after production.
 
 **Q2.** A research agent issues between three and seven web searches in varying order before calling `write_report`. You need a trajectory metric that verifies `search` and `write_report` were both called, without failing on extra searches or order. Which ADK configuration fits?
-A. `tool_trajectory_avg_score` with `EXACT`.
-B. `tool_trajectory_avg_score` with `IN_ORDER`.
-C. `tool_trajectory_avg_score` with `ANY_ORDER`.
-D. `response_match_score` at 0.8.
+
+- **A.** `tool_trajectory_avg_score` with `EXACT`.
+- **B.** `tool_trajectory_avg_score` with `IN_ORDER`.
+- **C.** `tool_trajectory_avg_score` with `ANY_ORDER`.
+- **D.** `response_match_score` at 0.8.
+
 **Answer: C** (B is acceptable only if order `search`→`write_report` must be enforced; the stem says order doesn't matter). `ANY_ORDER` requires all expected calls present, tolerates extras and ordering. `EXACT` fails on variable search counts.
 
 **Q3.** A multi-turn travel-booking agent asks for missing details in different orders depending on how the user phrases requests, so fixed scripted turns keep failing even when the booking succeeds. You want automated evaluation of goal completion. What should you do?
-A. Record more golden conversations and use `tool_trajectory_avg_score`.
-B. Use ADK user simulation with a `ConversationScenario` (starting prompt, conversation plan, persona) and evaluate with `multi_turn_task_success_v1` and `hallucinations_v1`.
-C. Use `final_response_match_v2` on the last turn only.
-D. Use `adk conformance test` in replay mode.
+
+- **A.** Record more golden conversations and use `tool_trajectory_avg_score`.
+- **B.** Use ADK user simulation with a `ConversationScenario` (starting prompt, conversation plan, persona) and evaluate with `multi_turn_task_success_v1` and `hallucinations_v1`.
+- **C.** Use `final_response_match_v2` on the last turn only.
+- **D.** Use `adk conformance test` in replay mode.
+
 **Answer: B.** User simulation generates dynamic user turns; reference-free multi-turn criteria are supported with it. Reference-based criteria (A, C) aren't supported with user simulation, and replay (D) enforces the brittle fixed path.
 
 **Q4.** Your LLM judge metric for "regulatory compliance of responses" frequently disagrees with your compliance SMEs. You must prove the judge is trustworthy before using it as a release gate. What should you do first?
-A. Raise `sampling_count` to 32.
-B. Switch to BLEU against SME-written references.
-C. Build a human-rated dataset (`compliance/human_rating`), run the custom pointwise metric, and compute agreement with `evaluate_autorater`; iterate the rubric or tune a judge model until agreement is acceptable.
-D. Replace the judge with `safety_v1`.
+
+- **A.** Raise `sampling_count` to 32.
+- **B.** Switch to BLEU against SME-written references.
+- **C.** Build a human-rated dataset (`compliance/human_rating`), run the custom pointwise metric, and compute agreement with `evaluate_autorater`; iterate the rubric or tune a judge model until agreement is acceptable.
+- **D.** Replace the judge with `safety_v1`.
+
 **Answer: C.** Autorater calibration against human ratings is the documented way to validate a judge; tuning the judge is the next step. More samples (A) reduce variance but not bias; BLEU (B) and safety (D) measure the wrong thing.
 
 **Q5.** You're comparing a new system prompt against the production prompt on 2,000 historical queries stored in BigQuery, and you want the judge to pick the better response per query while controlling for position bias. Which approach is best?
-A. Pointwise `GENERAL_QUALITY` on each variant, compare averages.
-B. Pairwise model-based metric in the Gen AI evaluation service with `flip_enabled=True`, dataset loaded from BigQuery.
-C. ADK `response_match_score` between the two variants.
-D. Online monitors on both revisions.
+
+- **A.** Pointwise `GENERAL_QUALITY` on each variant, compare averages.
+- **B.** Pairwise model-based metric in the Gen AI evaluation service with `flip_enabled=True`, dataset loaded from BigQuery.
+- **C.** ADK `response_match_score` between the two variants.
+- **D.** Online monitors on both revisions.
+
 **Answer: B.** Pairwise metrics are designed for candidate-vs-baseline comparison, and response flipping mitigates position bias; BigQuery is a supported dataset source. A is possible but less sensitive; C isn't a quality judgment; D requires production exposure.
 
 **Q6.** An ADK agent deployed on Agent Runtime with default settings shows median latency of 4 s but max latency of 60 s during traffic bursts of ~300 concurrent requests. CPU usage per container is low. What should you change first?
-A. Increase `resource_limits` to 8 CPU / 32 Gi.
-B. Increase `container_concurrency` to a multiple of 9 (e.g., 36) and raise `min_instances`.
-C. Switch the model to Flash-Lite.
-D. Increase `max_instances` to 1000.
+
+- **A.** Increase `resource_limits` to 8 CPU / 32 Gi.
+- **B.** Increase `container_concurrency` to a multiple of 9 (e.g., 36) and raise `min_instances`.
+- **C.** Switch the model to Flash-Lite.
+- **D.** Increase `max_instances` to 1000.
+
 **Answer: B.** Default concurrency (9) assumes sync code; async ADK agents are underused, so requests queue while it scales out. Google's guidance is multiples of 9 plus enough `min_instances` for baseline load. Low CPU rules out A; D doesn't fix scale-out lag.
 
 **Q7.** A regulated bank needs an ADK agent that calls an internal pricing API reachable only on a private RFC 1918 address in a Shared VPC. The agent must run with minimal ops overhead inside a VPC Service Controls perimeter. Which design fits?
-A. Agent Runtime with a Serverless VPC Access connector.
-B. Agent Runtime with a Private Service Connect interface (network attachment in the service project, ≥ /28 subnet), DNS peering to the private zone, and the Agent Platform Service Agent granted network permissions on the host project.
-C. Cloud Run with public ingress and an API key.
-D. Agent Runtime with `max_instances=1000`.
+
+- **A.** Agent Runtime with a Serverless VPC Access connector.
+- **B.** Agent Runtime with a Private Service Connect interface (network attachment in the service project, ≥ /28 subnet), DNS peering to the private zone, and the Agent Platform Service Agent granted network permissions on the host project.
+- **C.** Cloud Run with public ingress and an API key.
+- **D.** Agent Runtime with `max_instances=1000`.
+
 **Answer: B.** Agent Runtime reaches private networks through PSC-I with DNS peering; Shared VPC needs the service agent's network roles. Connectors (A) are for Cloud Run; C violates the requirement; with VPC-SC/PSC-I `max_instances` is capped at 100 (D is also invalid).
 
 **Q8.** After moving an ADK agent from local testing to Cloud Run with `adk deploy cloud_run --project P --region R ./agent`, users report the agent forgets earlier turns intermittently, especially after quiet periods. What's the most likely cause and fix?
-A. Context window overflow; enable context caching.
-B. Sessions are held in the in-memory session service; redeploy with `--session_service_uri` pointing at Agent Platform Sessions (`agentengine://...`) or a Cloud SQL database URL.
-C. Session affinity is disabled; enable it.
-D. `max_llm_calls` is too low.
+
+- **A.** Context window overflow; enable context caching.
+- **B.** Sessions are held in the in-memory session service; redeploy with `--session_service_uri` pointing at Agent Platform Sessions (`agentengine://...`) or a Cloud SQL database URL.
+- **C.** Session affinity is disabled; enable it.
+- **D.** `max_llm_calls` is too low.
+
 **Answer: B.** Without `--session_service_uri`, the container uses in-memory sessions that are lost on scale-in and not shared across instances. Session affinity (C) is best-effort and doesn't survive instance termination.
 
 **Q9.** A LoopAgent with a critic and a reviser runs until `max_iterations=10` every time, doubling cost, even for documents the critic considers finished. What's the correct fix?
-A. Lower `max_llm_calls` to 50.
-B. Give the critic (or reviser) an `exit_loop` tool that sets `tool_context.actions.escalate = True`, and instruct it to call the tool when no further changes are needed.
-C. Convert the LoopAgent to a ParallelAgent.
-D. Increase the temperature of the critic.
+
+- **A.** Lower `max_llm_calls` to 50.
+- **B.** Give the critic (or reviser) an `exit_loop` tool that sets `tool_context.actions.escalate = True`, and instruct it to call the tool when no further changes are needed.
+- **C.** Convert the LoopAgent to a ParallelAgent.
+- **D.** Increase the temperature of the critic.
+
 **Answer: B.** LoopAgent stops at `max_iterations` or when a sub-agent emits an event with `escalate=True`; the loop has no exit signal. A only caps the damage; C changes semantics.
 
 **Q10.** Your SRE team needs to find which of 12 tools causes a p95 latency regression in a production agent on Agent Runtime and wants per-tool trends alertable in Cloud Monitoring. What should you use?
-A. Search Cloud Logging for "tool" and eyeball timestamps.
-B. Enable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true`, use the Observability Tools view / `gen_ai.execute_tool.duration` by `gen_ai.tool.name`, and inspect `execute_tool` spans in Cloud Trace for slow traces.
-C. Run `adk eval` with `tool_trajectory_avg_score`.
-D. Enable DEBUG logging in production.
+
+- **A.** Search Cloud Logging for "tool" and eyeball timestamps.
+- **B.** Enable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true`, use the Observability Tools view / `gen_ai.execute_tool.duration` by `gen_ai.tool.name`, and inspect `execute_tool` spans in Cloud Trace for slow traces.
+- **C.** Run `adk eval` with `tool_trajectory_avg_score`.
+- **D.** Enable DEBUG logging in production.
+
 **Answer: B.** The ADK/OTel tool-duration metric and trace spans attribute latency per tool and can be alerted on. Eval (C) checks correctness, not latency; DEBUG (D) is noisy and risks PII.
 
 **Q11.** Product leadership wants weekly SQL reports on cost per user, tool error rates by MCP server, and human-approval (HITL) turnaround time across all agents, joinable with Cloud Trace. What is the most direct solution?
-A. Export Cloud Monitoring metrics to CSV.
-B. Add `BigQueryAgentAnalyticsPlugin` to the ADK `App`, writing to an `agent_events` table, and query its event views (`v_llm_response`, `v_tool_error`, HITL events) joined on `trace_id`.
-C. Build a custom Pub/Sub logger in each tool.
-D. Use online monitors.
+
+- **A.** Export Cloud Monitoring metrics to CSV.
+- **B.** Add `BigQueryAgentAnalyticsPlugin` to the ADK `App`, writing to an `agent_events` table, and query its event views (`v_llm_response`, `v_tool_error`, HITL events) joined on `trace_id`.
+- **C.** Build a custom Pub/Sub logger in each tool.
+- **D.** Use online monitors.
+
 **Answer: B.** The plugin captures token usage, tool provenance (including MCP), HITL events, and trace IDs into partitioned BigQuery tables with ready views. C reinvents it; D measures quality, not usage analytics.
 
 **Q12.** Four weeks after launch, a RAG support agent's answers are rated worse by customers, but error rates and latency are flat. Offline evalsets still pass. What's the best next step?
-A. Roll back to the previous revision.
-B. Configure online monitors on production traces with hallucination and response-quality metrics, alert on the resulting Cloud Monitoring metrics, and add low-scoring production conversations to the golden evalset for regression.
-C. Raise `min_instances`.
-D. Switch to `trajectory_exact_match` in CI.
+
+- **A.** Roll back to the previous revision.
+- **B.** Configure online monitors on production traces with hallucination and response-quality metrics, alert on the resulting Cloud Monitoring metrics, and add low-scoring production conversations to the golden evalset for regression.
+- **C.** Raise `min_instances`.
+- **D.** Switch to `trajectory_exact_match` in CI.
+
 **Answer: B.** This is quality drift from changing real-world inputs/data; static evalsets don't reflect it. Online monitoring detects it continuously, and feeding failures back into the golden set closes the loop. Rollback (A) assumes a code regression that isn't evidenced.
 
 ---
@@ -4010,144 +4104,184 @@ The ADK safety guidance lists these layers: identity and authorization, in-tool 
 
 ### Practice questions
 
-**1.** A retailer runs 40 ADK agents on Agent Runtime. Security requires that no agent can ever access resources outside the `ai-prod` folder, even if a developer mistakenly grants an agent a role on a finance project. What should you configure?
-A. An IAM deny policy on the finance project denying all permissions to agents
-B. A Principal Access Boundary policy with an ALLOW rule for the `ai-prod` folder, bound to the agent identities' principal set
-C. A VPC-SC perimeter around `ai-prod`
-D. An Agent Gateway Access policy with a DENY rule for finance endpoints
+**Q1.** A retailer runs 40 ADK agents on Agent Runtime. Security requires that no agent can ever access resources outside the `ai-prod` folder, even if a developer mistakenly grants an agent a role on a finance project. What should you configure?
+
+- **A.** An IAM deny policy on the finance project denying all permissions to agents
+- **B.** A Principal Access Boundary policy with an ALLOW rule for the `ai-prod` folder, bound to the agent identities' principal set
+- **C.** A VPC-SC perimeter around `ai-prod`
+- **D.** An Agent Gateway Access policy with a DENY rule for finance endpoints
+
 **Answer: B.** PAB defines which resources a principal set is *eligible* to access, whatever allow policies say. A deny on one project (A) doesn't cover other resources outside the folder. VPC-SC (C) is about data-perimeter context, not identity eligibility. Gateway policies (D) govern only gateway-mediated traffic.
 
-**2.** An agent must read support tickets through an internal MCP server but must never call `deleteTicket` or `updateTicket`. The MCP server is registered in Agent Registry and traffic flows through Agent Gateway. What is the most precise control?
-A. Remove the delete/update tools from the agent's instruction
-B. An IAM Unified Access Policy with an ALLOW rule on the MCP server and a DENY rule where `destination.agent_registry.mcp_server.tool.name in ['deleteTicket','updateTicket']`
-C. An IAM deny policy on the project denying `aiplatform.*`
-D. A Model Armor template with the dangerous-content filter at HIGH
+**Q2.** An agent must read support tickets through an internal MCP server but must never call `deleteTicket` or `updateTicket`. The MCP server is registered in Agent Registry and traffic flows through Agent Gateway. What is the most precise control?
+
+- **A.** Remove the delete/update tools from the agent's instruction
+- **B.** An IAM Unified Access Policy with an ALLOW rule on the MCP server and a DENY rule where `destination.agent_registry.mcp_server.tool.name in ['deleteTicket','updateTicket']`
+- **C.** An IAM deny policy on the project denying `aiplatform.*`
+- **D.** A Model Armor template with the dangerous-content filter at HIGH
+
 **Answer: B.** Access policies evaluated by IAP understand MCP tool names and annotations, and deny rules override allow. Instructions (A) aren't enforcement. C is far too broad. Model Armor (D) classifies content, not authorization.
 
-**3.** After binding an existing Agent Runtime agent to a new Agent Gateway in ENFORCE mode, every invocation fails with HTTP 498. What is the most likely cause?
-A. The Model Armor template is in a different region
-B. Essential platform endpoints (aiplatform, logging, telemetry, and so on, including mTLS and regional variants) aren't registered and allowed for the agent
-C. The agent lacks `roles/run.invoker`
-D. CAA blocked the agent's token
+**Q3.** After binding an existing Agent Runtime agent to a new Agent Gateway in ENFORCE mode, every invocation fails with HTTP 498. What is the most likely cause?
+
+- **A.** The Model Armor template is in a different region
+- **B.** Essential platform endpoints (aiplatform, logging, telemetry, and so on, including mTLS and regional variants) aren't registered and allowed for the agent
+- **C.** The agent lacks `roles/run.invoker`
+- **D.** CAA blocked the agent's token
+
 **Answer: B.** An enforcing gateway routes all egress, including Sessions/platform calls, and is default-deny with exact hostname matching. Allowlist the essential APIs first, or keep IAP in DRY_RUN until that's done.
 
-**4.** A new egress governance policy must be validated in staging without blocking any agent traffic, and you need evidence of what would have been blocked. What do you do?
-A. Set `iamEnforcementMode: "DRY_RUN"` in the IAP authz extension metadata and review IAP entries in Cloud Audit Logs
-B. Deploy the gateway without an authz policy
-C. Set Model Armor to INSPECT_ONLY
-D. Disable CAA with `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`
+**Q4.** A new egress governance policy must be validated in staging without blocking any agent traffic, and you need evidence of what would have been blocked. What do you do?
+
+- **A.** Set `iamEnforcementMode: "DRY_RUN"` in the IAP authz extension metadata and review IAP entries in Cloud Audit Logs
+- **B.** Deploy the gateway without an authz policy
+- **C.** Set Model Armor to INSPECT_ONLY
+- **D.** Disable CAA with `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`
+
 **Answer: A.** In dry-run, IAP logs disallowed communications to Cloud Audit Logs (filter `metadata.iamEnforcementMode="DRY_RUN"`) without blocking. C covers content findings only, not access decisions.
 
-**5.** An agent needs to create Jira issues *as the requesting employee*, so that Jira's own permissions apply and the audit trail shows the user. What is the recommended approach?
-A. Store a Jira admin API key in Secret Manager and read it in the tool
-B. Configure a 3-legged OAuth auth provider in Agent Identity auth manager, grant the agent `roles/agentidentity.user` on it, and attach it through `GcpAuthProviderScheme` (with `continue_uri`)
-C. A 2-legged OAuth auth provider
-D. Grant the agent identity a Jira role via IAM
+**Q5.** An agent needs to create Jira issues *as the requesting employee*, so that Jira's own permissions apply and the audit trail shows the user. What is the recommended approach?
+
+- **A.** Store a Jira admin API key in Secret Manager and read it in the tool
+- **B.** Configure a 3-legged OAuth auth provider in Agent Identity auth manager, grant the agent `roles/agentidentity.user` on it, and attach it through `GcpAuthProviderScheme` (with `continue_uri`)
+- **C.** A 2-legged OAuth auth provider
+- **D.** Grant the agent identity a Jira role via IAM
+
 **Answer: B.** 3LO gives user-delegated authority with consent, a vault, and refresh. ADK surfaces `adk_request_credential`, and audit attributes access to both agent and user. A and C act as the agent, not the user. Jira isn't governed by Google IAM (D).
 
-**6.** A CI/CD pipeline deletes and re-creates an Agent Runtime agent on every release. After each release the agent gets 403s on BigQuery even though the Terraform grants haven't changed. What fixes this most robustly?
-A. Switch the agent back to a service account
-B. Grant baseline roles to the project `principalSet://...attribute.platformContainer/aiplatform/projects/PROJ_NUM`, and bind sensitive roles post-deploy to the new principal from `spec.effectiveIdentity`
-C. Disable CAA
-D. Add the agent to Agent Registry
+**Q6.** A CI/CD pipeline deletes and re-creates an Agent Runtime agent on every release. After each release the agent gets 403s on BigQuery even though the Terraform grants haven't changed. What fixes this most robustly?
+
+- **A.** Switch the agent back to a service account
+- **B.** Grant baseline roles to the project `principalSet://...attribute.platformContainer/aiplatform/projects/PROJ_NUM`, and bind sensitive roles post-deploy to the new principal from `spec.effectiveIdentity`
+- **C.** Disable CAA
+- **D.** Add the agent to Agent Registry
+
 **Answer: B.** Every re-created `reasoningEngines` resource gets a new principal, and old bindings don't carry over. PrincipalSet bindings survive re-creation, and dynamic re-binding covers the narrow grants. A gives up per-agent identity benefits.
 
-**7.** The CISO wants a guarantee that every Gemini `generateContent` call in project `ai-prod` is screened for prompt injection and malicious URLs, even when developers don't pass any Model Armor config. What should you configure?
-A. Gemini safety settings `BLOCK_LOW_AND_ABOVE` in every agent
-B. Model Armor floor settings on the project with integrated service `VERTEX_AI` (AI_PLATFORM) and enforcement type `INSPECT_AND_BLOCK`
-C. An ADK `ModelArmorPlugin` in each app
-D. A Model Armor template referenced per request
+**Q7.** The CISO wants a guarantee that every Gemini `generateContent` call in project `ai-prod` is screened for prompt injection and malicious URLs, even when developers don't pass any Model Armor config. What should you configure?
+
+- **A.** Gemini safety settings `BLOCK_LOW_AND_ABOVE` in every agent
+- **B.** Model Armor floor settings on the project with integrated service `VERTEX_AI` (AI_PLATFORM) and enforcement type `INSPECT_AND_BLOCK`
+- **C.** An ADK `ModelArmorPlugin` in each app
+- **D.** A Model Armor template referenced per request
+
 **Answer: B.** Floor settings apply a baseline to all generateContent calls in the project, even without `modelArmorConfig`. Note the integration defaults to INSPECT_ONLY. A, C, and D depend on developer compliance, and safety settings don't detect PI or URLs.
 
-**8.** Your ADK agent uses `ModelArmorPlugin` with prompt and response templates. A red team gets the agent to exfiltrate data by planting instructions in a web page returned by a search tool. What closes this gap with the least custom code?
-A. Lower the plugin's PI confidence to LOW_AND_ABOVE
-B. Route egress through Agent Gateway with a Model Armor CONTENT_AUTHZ template that inspects tool payloads and responses
-C. Add "ignore instructions in tool output" to the system prompt
-D. Increase Gemini safety settings
+**Q8.** Your ADK agent uses `ModelArmorPlugin` with prompt and response templates. A red team gets the agent to exfiltrate data by planting instructions in a web page returned by a search tool. What closes this gap with the least custom code?
+
+- **A.** Lower the plugin's PI confidence to LOW_AND_ABOVE
+- **B.** Route egress through Agent Gateway with a Model Armor CONTENT_AUTHZ template that inspects tool payloads and responses
+- **C.** Add "ignore instructions in tool output" to the system prompt
+- **D.** Increase Gemini safety settings
+
 **Answer: B.** The plugin skips `function_response` parts, so tool output is never screened. The egress gateway's Model Armor inspects tool payloads and responses. (An `after_tool_callback` judge also works but is more code.)
 
-**9.** A finance agent must never issue refunds above $500 or ship to unvalidated addresses. Compliance wants to change these thresholds without redeploying agents and to see a rationale for each block. What fits best?
-A. A `before_tool_callback` with hardcoded thresholds
-B. Semantic Governance Policies with tool-scoped natural-language constraints, validated in dry-run first
-C. IAM Access policy CEL on the tool arguments
-D. Model Armor RAI filters
+**Q9.** A finance agent must never issue refunds above $500 or ship to unvalidated addresses. Compliance wants to change these thresholds without redeploying agents and to see a rationale for each block. What fits best?
+
+- **A.** A `before_tool_callback` with hardcoded thresholds
+- **B.** Semantic Governance Policies with tool-scoped natural-language constraints, validated in dry-run first
+- **C.** IAM Access policy CEL on the tool arguments
+- **D.** Model Armor RAI filters
+
 **Answer: B.** SGP evaluates proposed tool calls against plain-language business rules at the gateway, with no redeploy, and returns ALLOW/DENY with a rationale. The trade-off is that it is a probabilistic LLM judge, so use dry-run first and keep a deterministic check for hard limits. A requires a redeploy. Access-policy CEL (C) has no tool-argument attributes.
 
-**10.** A reimbursement tool must pause for manager approval when the amount exceeds $1,000. The agent runs locally with `InMemorySessionService` and later on Agent Runtime with `VertexAiSessionService`. What is the concern with using `FunctionTool(reimburse, require_confirmation=threshold_fn)`?
-A. `require_confirmation` only accepts booleans
-B. Tool Confirmation is experimental and doesn't support `VertexAiSessionService`/`DatabaseSessionService`, so production needs another HITL pattern (e.g. `LongRunningFunctionTool` or a graph `RequestInput`)
-C. It only works in TypeScript
-D. It requires Agent Gateway
+**Q10.** A reimbursement tool must pause for manager approval when the amount exceeds $1,000. The agent runs locally with `InMemorySessionService` and later on Agent Runtime with `VertexAiSessionService`. What is the concern with using `FunctionTool(reimburse, require_confirmation=threshold_fn)`?
+
+- **A.** `require_confirmation` only accepts booleans
+- **B.** Tool Confirmation is experimental and doesn't support `VertexAiSessionService`/`DatabaseSessionService`, so production needs another HITL pattern (e.g. `LongRunningFunctionTool` or a graph `RequestInput`)
+- **C.** It only works in TypeScript
+- **D.** It requires Agent Gateway
+
 **Answer: B.** These are documented limitations. `require_confirmation` does accept a predicate, and Python supports it natively.
 
-**11.** A healthcare org puts its Agent Runtime project into a VPC-SC perimeter. Agents deployed last month can still reach the public internet, but new agents can't. Why, and what is the fix for internet-dependent tools?
-A. VPC-SC needs 24h to propagate; wait
-B. Agents deployed before the project joined the perimeter aren't protected, so redeploy them. For required internet egress, use a PSC interface to a proxy VM with Cloud NAT inside the perimeter
-C. Enable Private Google Access
-D. Add the agents to Agent Registry
+**Q11.** A healthcare org puts its Agent Runtime project into a VPC-SC perimeter. Agents deployed last month can still reach the public internet, but new agents can't. Why, and what is the fix for internet-dependent tools?
+
+- **A.** VPC-SC needs 24h to propagate; wait
+- **B.** Agents deployed before the project joined the perimeter aren't protected, so redeploy them. For required internet egress, use a PSC interface to a proxy VM with Cloud NAT inside the perimeter
+- **C.** Enable Private Google Access
+- **D.** Add the agents to Agent Registry
+
 **Answer: B.** The project must be in the perimeter before deployment. Inside VPC-SC, default internet egress is blocked, and the supported path is PSC-I plus a proxy.
 
-**12.** A multi-agent system has an orchestrator on Agent Runtime calling a registered sub-agent over A2A. Calls fail with permission errors even though the developer has `roles/aiplatform.user`. What is the correct remediation?
-A. Grant `roles/agentregistry.viewer` (discovery) and `roles/aiplatform.user` on the sub-agent's reasoning engine to the **orchestrator's agent identity**, and, if egress goes through Agent Gateway, add an Access policy allowing `destination.agent_registry.agent.name` for that sub-agent
-B. Grant `roles/owner` to the developer
-C. Disable IAP on the gateway
-D. Use an API key between agents
+**Q12.** A multi-agent system has an orchestrator on Agent Runtime calling a registered sub-agent over A2A. Calls fail with permission errors even though the developer has `roles/aiplatform.user`. What is the correct remediation?
+
+- **A.** Grant `roles/agentregistry.viewer` (discovery) and `roles/aiplatform.user` on the sub-agent's reasoning engine to the **orchestrator's agent identity**, and, if egress goes through Agent Gateway, add an Access policy allowing `destination.agent_registry.agent.name` for that sub-agent
+- **B.** Grant `roles/owner` to the developer
+- **C.** Disable IAP on the gateway
+- **D.** Use an API key between agents
+
 **Answer: A.** Permissions must go to the calling agent's principal, not the user's. Gateway egress is default-deny, so an explicit agent-to-agent allow rule is also needed.
 
-**13.** An ADK agent on Agent Runtime (Agent Identity enabled) calls a custom MCP server deployed to Cloud Run with `--no-allow-unauthenticated`. Every tool call fails with 403. The agent sends an ID token whose audience is the service's `run.app` URL. What is the most likely fix?
-A. Redeploy the MCP server with `--allow-unauthenticated`
-B. Grant `roles/mcp.toolUser` to the agent on the project
-C. Grant `roles/run.invoker` on the MCP service to the agent's `principal://agents.global.org-…/reasoningEngines/ID`
-D. Store an API key for the MCP server in Secret Manager
+**Q13.** An ADK agent on Agent Runtime (Agent Identity enabled) calls a custom MCP server deployed to Cloud Run with `--no-allow-unauthenticated`. Every tool call fails with 403. The agent sends an ID token whose audience is the service's `run.app` URL. What is the most likely fix?
+
+- **A.** Redeploy the MCP server with `--allow-unauthenticated`
+- **B.** Grant `roles/mcp.toolUser` to the agent on the project
+- **C.** Grant `roles/run.invoker` on the MCP service to the agent's `principal://agents.global.org-…/reasoningEngines/ID`
+- **D.** Store an API key for the MCP server in Secret Manager
+
 **Answer: C.** The token is valid and the audience is right, so the failure is authorization. Cloud Run checks `run.invoker` for the caller's principal. `mcp.toolUser` (B) governs Google's remote MCP servers, not your own. A removes authentication entirely, and D adds a secret that Cloud Run IAM ignores.
 
-**14.** A Cloud Run-hosted A2A agent validates end-user OAuth tokens in the `Authorization` header. The team now wants Cloud Run IAM to also verify that only the Gemini Enterprise service agent can invoke it. How should the IAM token be sent?
-A. In `X-Serverless-Authorization`, with `roles/run.invoker` granted to `service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com`
-B. Concatenated with the user token in `Authorization`
-C. As a query parameter
-D. Replace the user token with the service agent's access token
+**Q14.** A Cloud Run-hosted A2A agent validates end-user OAuth tokens in the `Authorization` header. The team now wants Cloud Run IAM to also verify that only the Gemini Enterprise service agent can invoke it. How should the IAM token be sent?
+
+- **A.** In `X-Serverless-Authorization`, with `roles/run.invoker` granted to `service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com`
+- **B.** Concatenated with the user token in `Authorization`
+- **C.** As a query parameter
+- **D.** Replace the user token with the service agent's access token
+
 **Answer: A.** Cloud Run checks only `X-Serverless-Authorization` when both headers are present, and forwards `Authorization` untouched. Gemini Enterprise does exactly this: a service-agent OIDC token plus the user token. D loses user delegation.
 
-**15.** An agent using the Agent Identity auth manager works in `adk web` but, once deployed to Agent Runtime with the Vertex AI Python SDK, fails at query time with "No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'". What fixes it?
-A. Grant `roles/agentidentity.admin` to the agent
-B. Call `CredentialManager.register_auth_provider(GcpAuthProvider())` inside `set_up()` of an `AdkApp` subclass
-C. Move the auth provider to the `global` location
-D. Recreate the provider with the legacy `connectors` API
+**Q15.** An agent using the Agent Identity auth manager works in `adk web` but, once deployed to Agent Runtime with the Vertex AI Python SDK, fails at query time with "No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'". What fixes it?
+
+- **A.** Grant `roles/agentidentity.admin` to the agent
+- **B.** Call `CredentialManager.register_auth_provider(GcpAuthProvider())` inside `set_up()` of an `AdkApp` subclass
+- **C.** Move the auth provider to the `global` location
+- **D.** Recreate the provider with the legacy `connectors` API
+
 **Answer: B.** The SDK serializes the app, so module-level registration doesn't run in the container. `set_up()` runs at container start. C is wrong because auth providers aren't available in `global`.
 
-**16.** A platform team lets many agents use Google's remote BigQuery MCP server. Security requires that no agent in the org can ever call a tool that modifies data, regardless of granted roles, and there is no Agent Gateway yet. What should you implement?
-A. Remove write tools from each agent's instructions
-B. An org-level IAM deny policy on `mcp.googleapis.com/tools.call` with the condition `api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == false`
-C. A PAB policy limiting agents to read-only datasets
-D. A Model Armor floor setting for `GOOGLE_MCP_SERVER`
+**Q16.** A platform team lets many agents use Google's remote BigQuery MCP server. Security requires that no agent in the org can ever call a tool that modifies data, regardless of granted roles, and there is no Agent Gateway yet. What should you implement?
+
+- **A.** Remove write tools from each agent's instructions
+- **B.** An org-level IAM deny policy on `mcp.googleapis.com/tools.call` with the condition `api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == false`
+- **C.** A PAB policy limiting agents to read-only datasets
+- **D.** A Model Armor floor setting for `GOOGLE_MCP_SERVER`
+
 **Answer: B.** IAM deny policies support MCP attributes (`tool.isReadOnly`, `tool.name`) for the `mcp.tools.call` permission on Google Cloud MCP servers. PAB (C) limits resources, not tool types. Model Armor (D) screens content, and A isn't enforcement. `tools/list` still shows the write tools, but calls to them fail.
 
-**17.** A nightly reconciliation agent pulls opportunities from Salesforce. No user is present, Salesforce supports OAuth client credentials, and security forbids secrets in code or environment variables. What is the recommended approach?
-A. 3-legged OAuth auth provider, with a service user logged in once
-B. 2-legged OAuth auth provider in the auth manager, `roles/agentidentity.user` on it for the agent, referenced with `GcpAuthProviderScheme`
-C. Salesforce password in Secret Manager
-D. Grant the agent identity a Salesforce role in IAM
+**Q17.** A nightly reconciliation agent pulls opportunities from Salesforce. No user is present, Salesforce supports OAuth client credentials, and security forbids secrets in code or environment variables. What is the recommended approach?
+
+- **A.** 3-legged OAuth auth provider, with a service user logged in once
+- **B.** 2-legged OAuth auth provider in the auth manager, `roles/agentidentity.user` on it for the agent, referenced with `GcpAuthProviderScheme`
+- **C.** Salesforce password in Secret Manager
+- **D.** Grant the agent identity a Salesforce role in IAM
+
 **Answer: B.** 2LO is the documented choice for M2M with OAuth-capable services. The vault holds the client secret and ADK injects the tokens. A needs a consenting user, C is basic auth (not recommended), and D doesn't apply because Salesforce isn't governed by Google IAM.
 
-**18.** An ADK agent registered in Gemini Enterprise must query BigQuery **as the signed-in employee**, so that dataset ACLs apply per user. What completes the design?
-A. Grant the agent identity `bigquery.dataViewer` on all datasets
-B. Create an OAuth web client with the Gemini Enterprise redirect URIs, create an authorization resource (`serverSideOauth2`), reference it in `authorizationConfig.toolAuthorizations`, and read the token in the agent through `external_access_token_key="AUTH_ID"`
-C. Use Workload Identity Federation
-D. Pass the user's password to the agent through session state
+**Q18.** An ADK agent registered in Gemini Enterprise must query BigQuery **as the signed-in employee**, so that dataset ACLs apply per user. What completes the design?
+
+- **A.** Grant the agent identity `bigquery.dataViewer` on all datasets
+- **B.** Create an OAuth web client with the Gemini Enterprise redirect URIs, create an authorization resource (`serverSideOauth2`), reference it in `authorizationConfig.toolAuthorizations`, and read the token in the agent through `external_access_token_key="AUTH_ID"`
+- **C.** Use Workload Identity Federation
+- **D.** Pass the user's password to the agent through session state
+
 **Answer: B.** GE runs consent and hands the user token to the agent, so BigQuery enforces that user's IAM. A acts as the agent and removes per-user enforcement, which is the confused-deputy risk. The GE authorization URI should include `access_type=offline` and `prompt=consent`.
 
-**19.** A company runs its agents on GKE Autopilot and wants each agent to call Vertex AI and Cloud Storage without any key files and with per-workload least privilege. What should they use?
-A. Agent Identity with `identity_type=AGENT_IDENTITY`
-B. A service-account JSON key mounted as a Kubernetes Secret
-C. Workload Identity Federation for GKE, granting roles to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA`
-D. The node's default Compute Engine service account
+**Q19.** A company runs its agents on GKE Autopilot and wants each agent to call Vertex AI and Cloud Storage without any key files and with per-workload least privilege. What should they use?
+
+- **A.** Agent Identity with `identity_type=AGENT_IDENTITY`
+- **B.** A service-account JSON key mounted as a Kubernetes Secret
+- **C.** Workload Identity Federation for GKE, granting roles to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA`
+- **D.** The node's default Compute Engine service account
+
 **Answer: C.** Agent Identity is supported on Agent Runtime, Gemini Enterprise, and Cloud Run, not GKE. WIF for GKE gives keyless, per-KSA principals. B and D are key-based or over-shared.
 
-**20.** A 3LO GitHub integration through the auth manager fails at the GitHub step with `redirect_uri_mismatch`. The team registered `https://app.example.com/validateUserId` as the callback in the GitHub OAuth app. What is wrong?
-A. GitHub needs multiple scopes
-B. The GitHub OAuth app must register the auth manager's callback `https://agentidentitycredentials.googleapis.com/v1/projects/P/locations/L/authProviders/NAME/oauthcallback`. `validateUserId` is the `continue_uri` that the user reaches afterwards
-C. The agent lacks `roles/run.invoker`
-D. CAA blocked the redirect
+**Q20.** A 3LO GitHub integration through the auth manager fails at the GitHub step with `redirect_uri_mismatch`. The team registered `https://app.example.com/validateUserId` as the callback in the GitHub OAuth app. What is wrong?
+
+- **A.** GitHub needs multiple scopes
+- **B.** The GitHub OAuth app must register the auth manager's callback `https://agentidentitycredentials.googleapis.com/v1/projects/P/locations/L/authProviders/NAME/oauthcallback`. `validateUserId` is the `continue_uri` that the user reaches afterwards
+- **C.** The agent lacks `roles/run.invoker`
+- **D.** CAA blocked the redirect
+
 **Answer: B.** The auth manager receives the code at its `oauthcallback` and then sends the user to your `continue_uri`, where you call `credentials:finalize`. Note also that GitHub supports only a single scope in the auth manager, which makes A the opposite of the fix.
 
 ---
@@ -4317,7 +4451,7 @@ Production drift ...................... online monitors → Cloud Monitoring ale
 11. VPC-SC: Agent Runtime project must be **in the perimeter before deploy**; Agent Gateway/IAM agent policies have limited VPC-SC support.
 12. Changing GE identity provider ⇒ **recreate ingested data stores**, users lose chat history.
 
-### 6.5 Heavily tested — quick recall
+### 6.4 Heavily tested — quick recall
 
 **Antigravity customization** (full detail: Section 2.2.b)
 ```
@@ -4360,7 +4494,7 @@ Grant                      roles/agentidentity.user on the auth provider · regi
 Tokens                     CAA mTLS + DPoP binding → stolen token useless outside runtime
 ```
 
-### 6.4 Items flagged unverified by research (don't over-invest)
+### 6.5 Items flagged unverified by research (don't over-invest)
 
 - "Agent vs human mode" in Agents CLI — best mapping is interactive/agent-assisted vs `--yes`/manual/`--json`; no literal flag found.
 - Whether Antigravity CLI terminal sandbox is on by default (docs conflict).

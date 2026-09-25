@@ -113,7 +113,7 @@ Production drift ...................... online monitors → Cloud Monitoring ale
 11. VPC-SC: Agent Runtime project must be **in the perimeter before deploy**; Agent Gateway/IAM agent policies have limited VPC-SC support.
 12. Changing GE identity provider ⇒ **recreate ingested data stores**, users lose chat history.
 
-### 6.5 Heavily tested — quick recall
+### 6.4 Heavily tested — quick recall
 
 **Antigravity customization** (full detail: Section 2.2.b)
 ```
@@ -156,7 +156,7 @@ Grant                      roles/agentidentity.user on the auth provider · regi
 Tokens                     CAA mTLS + DPoP binding → stolen token useless outside runtime
 ```
 
-### 6.4 Items flagged unverified by research (don't over-invest)
+### 6.5 Items flagged unverified by research (don't over-invest)
 
 - "Agent vs human mode" in Agents CLI — best mapping is interactive/agent-assisted vs `--yes`/manual/`--json`; no literal flag found.
 - Whether Antigravity CLI terminal sandbox is on by default (docs conflict).
