@@ -43,19 +43,19 @@ Click a thumbnail for the full-size image.
 
 Hands-on walkthroughs from the [TechTrapture YouTube channel](https://youtube.com/@techtrapture), grouped by exam section.
 
-**§1 · Low-code agents & enterprise data**
+**Section 1 · Low-code agents & enterprise data**
 
 <table>
 <tr><td align="center" width="33%"><a href="https://youtu.be/9Drx6KCNxHs"><img src="https://img.youtube.com/vi/9Drx6KCNxHs/mqdefault.jpg" width="260" alt="Gemini Enterprise Explained — Connect & Deploy ADK Agents"></a><br><sub><b>Gemini Enterprise Explained — Connect & Deploy ADK Agents</b> · 26 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/P9jdr1JztIQ"><img src="https://img.youtube.com/vi/P9jdr1JztIQ/mqdefault.jpg" width="260" alt="Build Enterprise RAG Apps with Agent Search"></a><br><sub><b>Build Enterprise RAG Apps with Agent Search</b> · 49 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/HSJIrCiAmOc"><img src="https://img.youtube.com/vi/HSJIrCiAmOc/mqdefault.jpg" width="260" alt="Custom LLM Chatbot on Your Data with Agent Builder & Dialogflow"></a><br><sub><b>Custom LLM Chatbot on Your Data with Agent Builder & Dialogflow</b> · 25 min</sub></td></tr>
 </table>
 
-**§2 · Coding agents & MCP**
+**Section 2 · Coding agents & MCP**
 
 <table>
 <tr><td align="center" width="33%"><a href="https://youtu.be/oHwWdDhPnzE"><img src="https://img.youtube.com/vi/oHwWdDhPnzE/mqdefault.jpg" width="260" alt="I Explored Google Antigravity"></a><br><sub><b>I Explored Google Antigravity</b> · 19 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/EF6LLGR9k0I"><img src="https://img.youtube.com/vi/EF6LLGR9k0I/mqdefault.jpg" width="260" alt="Build Your First MCP Server — Google Maps & VS Code"></a><br><sub><b>Build Your First MCP Server — Google Maps & VS Code</b> · 14 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/9jRBRNRDRh4"><img src="https://img.youtube.com/vi/9jRBRNRDRh4/mqdefault.jpg" width="260" alt="Build Your First MCP Server — Google Maps & Claude Desktop"></a><br><sub><b>Build Your First MCP Server — Google Maps & Claude Desktop</b> · 10 min</sub></td></tr>
 </table>
 
-**§3 · Custom agents with ADK**
+**Section 3 · Custom agents with ADK**
 
 <table>
 <tr><td align="center" width="33%"><a href="https://youtu.be/F1a9lLySxLI"><img src="https://img.youtube.com/vi/F1a9lLySxLI/mqdefault.jpg" width="260" alt="ADK Session, State & Memory Explained"></a><br><sub><b>ADK Session, State & Memory Explained</b> · 18 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/E9BcLtuuI7U"><img src="https://img.youtube.com/vi/E9BcLtuuI7U/mqdefault.jpg" width="260" alt="ADK Session Management Hands-On (InMemory, Cloud SQL, Vertex AI)"></a><br><sub><b>ADK Session Management Hands-On (InMemory, Cloud SQL, Vertex AI)</b> · 23 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/JNO9xb1p1mQ"><img src="https://img.youtube.com/vi/JNO9xb1p1mQ/mqdefault.jpg" width="260" alt="ADK State Management Explained with Demo"></a><br><sub><b>ADK State Management Explained with Demo</b> · 27 min</sub></td></tr>
@@ -63,13 +63,13 @@ Hands-on walkthroughs from the [TechTrapture YouTube channel](https://youtube.co
 <tr><td align="center" width="33%"><a href="https://youtu.be/wr0SwuPDT0g"><img src="https://img.youtube.com/vi/wr0SwuPDT0g/mqdefault.jpg" width="260" alt="RAG Explained — Keyword vs Semantic vs Hybrid Search"></a><br><sub><b>RAG Explained — Keyword vs Semantic vs Hybrid Search</b> · 22 min</sub></td></tr>
 </table>
 
-**§4 · Deploy & operate agents**
+**Section 4 · Deploy & operate agents**
 
 <table>
 <tr><td align="center" width="33%"><a href="https://youtu.be/zA0Y3smlavA"><img src="https://img.youtube.com/vi/zA0Y3smlavA/mqdefault.jpg" width="260" alt="Deploy an ADK Agent to Cloud Run"></a><br><sub><b>Deploy an ADK Agent to Cloud Run</b> · 14 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/ZlcJFnVaXD4"><img src="https://img.youtube.com/vi/ZlcJFnVaXD4/mqdefault.jpg" width="260" alt="AI SRE Agent with ADK + MCP — Auto RCA & Log Analysis"></a><br><sub><b>AI SRE Agent with ADK + MCP — Auto RCA & Log Analysis</b> · 36 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/N6uvIPZbM_U"><img src="https://img.youtube.com/vi/N6uvIPZbM_U/mqdefault.jpg" width="260" alt="An AI Agent That Runs My Google Cloud Operations"></a><br><sub><b>An AI Agent That Runs My Google Cloud Operations</b> · 19 min</sub></td></tr>
 </table>
 
-**§5 · Guardrails & secure execution**
+**Section 5 · Guardrails & secure execution**
 
 <table>
 <tr><td align="center" width="33%"><a href="https://youtu.be/DyeW_0mcqI4"><img src="https://img.youtube.com/vi/DyeW_0mcqI4/mqdefault.jpg" width="260" alt="ADK Model Callbacks — Before & After LLM Hooks"></a><br><sub><b>ADK Model Callbacks — Before & After LLM Hooks</b> · 9 min</sub></td><td align="center" width="33%"><a href="https://youtu.be/Ee1Y7gwvhy8"><img src="https://img.youtube.com/vi/Ee1Y7gwvhy8/mqdefault.jpg" width="260" alt="ADK Tool Callbacks — Before & After Tool Hooks"></a><br><sub><b>ADK Tool Callbacks — Before & After Tool Hooks</b> · 13 min</sub></td></tr>
@@ -79,7 +79,7 @@ Hands-on walkthroughs from the [TechTrapture YouTube channel](https://youtube.co
 
 - Scope comes straight from the official exam guide's sections and in-scope tool list.
 - Content is researched against official Google documentation (docs.cloud.google.com, adk.dev, antigravity.google) and the ADK docs.
-- Anything that could not be confirmed in the docs is marked **(unverified)** in the chapters and collected in [§6.4](sections/06-cheat-sheet.md#64-items-flagged-unverified-by-research-dont-over-invest).
+- Anything that could not be confirmed in the docs is marked **(unverified)** in the chapters and collected in [Section 6.4](sections/06-cheat-sheet.md#64-items-flagged-unverified-by-research-dont-over-invest).
 
 > **Not affiliated with Google.** This is an independent study resource. Google Cloud products change quickly — always confirm details against the current [official documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/overview) and the exam guide on [Google Cloud certification](https://cloud.google.com/learn/certification).
 

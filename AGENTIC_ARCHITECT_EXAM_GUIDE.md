@@ -78,7 +78,7 @@ OPTIMIZE     Agent evaluation (ADK evalsets, Agent Platform Evals, autoraters)
 - **Memory Bank**: continuous event streaming with automatic memory generation triggered by event count or idle time; immutable **memory revisions** (version history).
 - **Agent Identity**: **GA**. Per-agent SPIFFE-style principal; `principalSet://agents.global.org-ORG_ID.system.id.goog/...` to grant to all agents in a project/org. Credentials protected by Google-managed **Context-Aware Access (mTLS + DPoP token binding)** so tokens can't be replayed outside the runtime. Integrates with IAM allow/deny, **PAB**, VPC-SC (APIs `agentidentity.googleapis.com`, `agentidentitycredentials.googleapis.com`; restricted VIP).
 - **Auth Manager** (Agent Identity auth manager): centralized credential vault + auth broker; API key, OAuth client ID/secret, or **OAuth delegation on behalf of a user**; handles consent dialog; access revocation; all access attributable to the agent's SPIFFE ID.
-- **Agent Gateway**: networking component that governs user→agent, agent→tool, agent→agent traffic; enforces IAM (Unified) Access policies via **IAP**; run **DRY_RUN** first (logs violations to Cloud Audit Logs, doesn't block) then **ENFORCE**. IAM agent-policy pages state **no VPC Service Controls support**; perimeter enforcement of gateway traffic exists only for gateways created after 2026-09-08 using an agent connectivity template in `ALL_TRAFFIC` mode (see §5). Two separate dry-runs: `iamEnforcementMode: DRY_RUN` (access) and `INSPECT_ONLY` (Model Armor). Launch stage: Private Preview at announcement.
+- **Agent Gateway**: networking component that governs user→agent, agent→tool, agent→agent traffic; enforces IAM (Unified) Access policies via **IAP**; run **DRY_RUN** first (logs violations to Cloud Audit Logs, doesn't block) then **ENFORCE**. IAM agent-policy pages state **no VPC Service Controls support**; perimeter enforcement of gateway traffic exists only for gateways created after 2026-09-08 using an agent connectivity template in `ALL_TRAFFIC` mode (see Section 5). Two separate dry-runs: `iamEnforcementMode: DRY_RUN` (access) and `INSPECT_ONLY` (Model Armor). Launch stage: Private Preview at announcement.
 - **Agent Identity principal changes on redeploy** (new `reasoningEngines` ID ⇒ new principal ⇒ old IAM grants orphaned) — grant baseline roles to the project `principalSet`, re-bind sensitive roles post-deploy via `spec.effectiveIdentity`.
 - **Agent Registry**: catalog of **Agent, McpServer, Endpoint, Skill, SkillRevision, Publisher** resources; auto-registration (same project only) from Agent Runtime, Cloud Run `--functional-type`, labelled GKE workloads and Google remote MCP servers + manual registration for everything else; keyword/prefix search (**semantic search only for skills**); `gcloud agent-registry mcp-servers list|describe`; Terraform `google_agent_registry_*`; console gives ADK code snippets per tool; Observability tab (latency, traffic, errors, token spend).
 - **Skill Registry** (Preview): skill = zip with **SKILL.md** (YAML front matter `name` ≤ 64 chars lowercase/hyphen, `description` ≤ 1024 chars); zip ≤ 10 MB, ≤ 500 MB unzipped, ≤ 10k items, ≤ 8 levels deep, no symlinks; Skill (mutable) vs **SkillRevision** (immutable); `skills:retrieve` = semantic search; built-in `gcp-skill-registry` skill; IDs can't start with `gcp-`; **no VPC-SC, no CMEK**; regions us-central1, europe-west4, us-east5.
@@ -97,12 +97,12 @@ OPTIMIZE     Agent evaluation (ADK evalsets, Agent Platform Evals, autoraters)
 
 | Week | Focus | Hands-on (sandbox project, cheapest tiers, tear down after) |
 |---|---|---|
-| 1 | §3.1 + §3.3 — ADK depth: LlmAgent, workflow agents, **graph workflows** (new), transfer vs AgentTool, callbacks, plugins, session state prefixes, Memory Bank, model routing; MCP + A2A | Build a 3-agent graph workflow with one MCP tool + one A2A remote agent; wire Agent Platform Sessions + Memory Bank |
-| 2 | §3.2 + §5 — RAG (Vector Search / Agent Retrieval / RAG Engine / Agent Search), Agent Identity, Registry, Auth Manager, PAB, Agent Gateway, Model Armor, HITL | Deploy to Agent Runtime with Agent Identity; register in Agent Registry; add Model Armor template + tool-confirmation HITL; read (don't apply) a PAB policy |
-| 3 | §4 — ADK evalsets, `adk eval`, criteria; Agent Platform Evals (trajectory metrics, autoraters); runtime selection; troubleshooting; Trace/Logging | Write evalset with golden trajectories; run in Cloud Build as CI gate; compare Agent Runtime vs Cloud Run deploy of same agent |
-| 4 | §2 + §1 — Antigravity (skills/rules/hooks/subagents/plugins), Agents CLI, Claude Code on Agent Platform, GKE Agent Sandbox / Workstations; Agent Designer, CX Agent Studio pages/routes/event handlers, Gemini Enterprise connectors | Configure Antigravity with an MCP server + custom skill; build a small CX Agent Studio flow; do all practice questions; re-read every "Exam signals" block |
+| 1 | Section 3.1 + Section 3.3 — ADK depth: LlmAgent, workflow agents, **graph workflows** (new), transfer vs AgentTool, callbacks, plugins, session state prefixes, Memory Bank, model routing; MCP + A2A | Build a 3-agent graph workflow with one MCP tool + one A2A remote agent; wire Agent Platform Sessions + Memory Bank |
+| 2 | Section 3.2 + Section 5 — RAG (Vector Search / Agent Retrieval / RAG Engine / Agent Search), Agent Identity, Registry, Auth Manager, PAB, Agent Gateway, Model Armor, HITL | Deploy to Agent Runtime with Agent Identity; register in Agent Registry; add Model Armor template + tool-confirmation HITL; read (don't apply) a PAB policy |
+| 3 | Section 4 — ADK evalsets, `adk eval`, criteria; Agent Platform Evals (trajectory metrics, autoraters); runtime selection; troubleshooting; Trace/Logging | Write evalset with golden trajectories; run in Cloud Build as CI gate; compare Agent Runtime vs Cloud Run deploy of same agent |
+| 4 | Section 2 + Section 1 — Antigravity (skills/rules/hooks/subagents/plugins), Agents CLI, Claude Code on Agent Platform, GKE Agent Sandbox / Workstations; Agent Designer, CX Agent Studio pages/routes/event handlers, Gemini Enterprise connectors | Configure Antigravity with an MCP server + custom skill; build a small CX Agent Studio flow; do all practice questions; re-read every "Exam signals" block |
 
-Final 3 days: only the **Exam signals**, **decision tables**, and **practice question explanations** from each chapter + the §6 cheat sheet.
+Final 3 days: only the **Exam signals**, **decision tables**, and **practice question explanations** from each chapter + the Section 6 cheat sheet.
 
 ## Contents
 
@@ -2240,7 +2240,7 @@ gcloud agent-registry bindings create orch-to-crm --project=PROJECT_ID --locatio
 In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth_provider_binding { auth_provider, scopes, continue_uri }`. Bindings aren't available in `us`/`eu`.
 
 **H. Governance: what registration unlocks**
-- **Agent Gateway (egress, `AGENT_TO_ANYWHERE`)** attaches up to two registries: one global and one regional or multi-regional. Destinations must be **registered** or matched by an explicit unregistered-host rule; otherwise the default is **deny**. One gateway governs up to 5,000 registered resources. If the registry is regional, policies apply only to resources in that region (see §5.1).
+- **Agent Gateway (egress, `AGENT_TO_ANYWHERE`)** attaches up to two registries: one global and one regional or multi-regional. Destinations must be **registered** or matched by an explicit unregistered-host rule; otherwise the default is **deny**. One gateway governs up to 5,000 registered resources. If the registry is regional, policies apply only to resources in that region (see Section 5.1).
 - **IAM egress (allow) policies through IAP**, bound to registry resources:
   ```bash
   gcloud iap web set-iam-policy policy.json --project=PROJECT_ID \
@@ -2261,7 +2261,7 @@ In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth
   - **Semantic governance policies** and **Model Armor** run at the gateway on top of IAM.
   - For Google MCP servers, Model Armor floor settings can scan all traffic: `gcloud model-armor floorsettings update --full-uri=projects/P/locations/global/floorSetting --add-integrated-services=GOOGLE_MCP_SERVER --google-mcp-server-enforcement-type=INSPECT_AND_BLOCK`. If the agent and server are in different projects, floor settings in both projects mean Model Armor is invoked twice.
 - **Visibility:**
-  - Each MCP server's **Observability** tab. For the gateway's own Observability tab, see §5.1.
+  - Each MCP server's **Observability** tab. For the gateway's own Observability tab, see Section 5.1.
   - The **topology** graph, keyed by resource URI.
   - Agent Platform **Security** tab and per-resource **Security** tabs, which surface Security Command Center findings such as excessive permissions and toxic combinations.
 
@@ -2317,7 +2317,7 @@ In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth
 |---|---|
 | Governed **inside the registry** next to agents and MCP servers. `gcloud alpha agent-registry skills …`. Semantic search. ZIP ≤ 500 KB | Separate Agent Platform service consumed in ADK through `GCPSkillRegistry` + `SkillToolset` (`search_skills` / `load_skill`). Its own payload validation (ZIP ≤ 10 MB). The Skill Registry docs point to Agent Registry for central governance |
 
-Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, §3.2.3), which is a toolset factory for Google-managed MCP servers. It is **not** the governance catalog that Agent Gateway enforces against.
+Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, Section 3.2.3), which is a toolset factory for Google-managed MCP servers. It is **not** the governance catalog that Agent Gateway enforces against.
 
 **L. Gotchas (high-yield)**
 - **No introspection on manual entries.** New tools are invisible until you run `services update --mcp-server-spec-content=…`, which is a **full replace**.
@@ -3817,7 +3817,7 @@ gcloud iam access-policies create agent-egress --details-rules=policy.json --pro
 ### 5.1.4 Agentic governance and policy enforcement: Agent Registry and Model Armor
 
 #### Agent Registry
-- **What it is:** the central catalog of **agents, MCP servers, endpoints, and skills (Preview)**. Agents and MCP servers are searchable by keyword or prefix (semantic search exists only for skills). **Auto-registration** (same project only) covers Agent Runtime and Gemini Enterprise agents, Google remote MCP servers, Cloud Run services deployed with `--functional-type=agent|mcp-server`, and GKE workloads labelled `registry.gke.io/functional-type`. Everything else, including cross-project entries, is registered manually (see §3.2.4). Registries can be global, multi-regional, or regional.
+- **What it is:** the central catalog of **agents, MCP servers, endpoints, and skills (Preview)**. Agents and MCP servers are searchable by keyword or prefix (semantic search exists only for skills). **Auto-registration** (same project only) covers Agent Runtime and Gemini Enterprise agents, Google remote MCP servers, Cloud Run services deployed with `--functional-type=agent|mcp-server`, and GKE workloads labelled `registry.gke.io/functional-type`. Everything else, including cross-project entries, is registered manually (see Section 3.2.4). Registries can be global, multi-regional, or regional.
 - **Governance role:** the gateway's allowlist, since unregistered destinations are denied unless a policy names them by host. Registry entries are also the targets of Access policies (`--agent`, `--endpoint`, `--mcp-server`), Semantic Governance policies, and auth-provider **bindings**.
 - **IAM roles:** `roles/agentregistry.viewer` (discover), `.editor`, and `.admin` (bindings). For **A2A delegation**, the *parent agent's identity* (not your user) needs `roles/agentregistry.viewer` to resolve the sub-agent and `roles/aiplatform.user` on the sub-agent's reasoning engine.
 - **Composite Google APIs endpoint:** register several core Google API hostnames in a single registry entry, which suits multi-project setups.
@@ -4319,7 +4319,7 @@ Production drift ...................... online monitors → Cloud Monitoring ale
 
 ### 6.5 Heavily tested — quick recall
 
-**Antigravity customization** (full detail: §2.2.b)
+**Antigravity customization** (full detail: Section 2.2.b)
 ```
 Workspace  .agents/rules/*.md · .agents/skills/<name>/SKILL.md · .agents/hooks.json · .agents/mcp_config.json · .agents/agents/*.md
 Global     ~/.gemini/config/{rules,skills,hooks.json,mcp_config.json}   (CLI skills: ~/.gemini/antigravity-cli/skills/)
@@ -4333,7 +4333,7 @@ Workflows      deprecated → skills (/migrate-workflows), retired 2026-11-01
 Enforce/block → hook · convention → rule · procedure + scripts → skill · separate context → subagent · ship to devs → plugin
 ```
 
-**Agent Registry — MCP servers** (full detail: §3.2.4)
+**Agent Registry — MCP servers** (full detail: Section 3.2.4)
 ```
 Enable        gcloud services enable agentregistry.googleapis.com   (also turns on its own MCP server)
 Auto (same project only)  Google remote MCP servers (global, on API enable) · Cloud Run --functional-type=mcp-server
@@ -4348,7 +4348,7 @@ Traps         us/eu multi-regions: no manual registration or bindings · URN ≠
 ADK           AgentRegistry(project, location).get_mcp_toolset(name, continue_uri=…) · get_remote_a2a_agent(…)
 ```
 
-**Agent-to-tool auth** (full detail: §5.1.1b)
+**Agent-to-tool auth** (full detail: Section 5.1.1b)
 ```
 Google APIs / remote MCP   Agent Identity (ADC) + product role + roles/mcp.toolUser
 Custom MCP on Cloud Run    ID token, aud = run.app URL · roles/run.invoker · X-Serverless-Authorization wins if both headers

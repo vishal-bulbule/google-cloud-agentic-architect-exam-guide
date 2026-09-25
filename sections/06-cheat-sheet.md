@@ -115,7 +115,7 @@ Production drift ...................... online monitors → Cloud Monitoring ale
 
 ### 6.5 Heavily tested — quick recall
 
-**Antigravity customization** (full detail: §2.2.b)
+**Antigravity customization** (full detail: Section 2.2.b)
 ```
 Workspace  .agents/rules/*.md · .agents/skills/<name>/SKILL.md · .agents/hooks.json · .agents/mcp_config.json · .agents/agents/*.md
 Global     ~/.gemini/config/{rules,skills,hooks.json,mcp_config.json}   (CLI skills: ~/.gemini/antigravity-cli/skills/)
@@ -129,7 +129,7 @@ Workflows      deprecated → skills (/migrate-workflows), retired 2026-11-01
 Enforce/block → hook · convention → rule · procedure + scripts → skill · separate context → subagent · ship to devs → plugin
 ```
 
-**Agent Registry — MCP servers** (full detail: §3.2.4)
+**Agent Registry — MCP servers** (full detail: Section 3.2.4)
 ```
 Enable        gcloud services enable agentregistry.googleapis.com   (also turns on its own MCP server)
 Auto (same project only)  Google remote MCP servers (global, on API enable) · Cloud Run --functional-type=mcp-server
@@ -144,7 +144,7 @@ Traps         us/eu multi-regions: no manual registration or bindings · URN ≠
 ADK           AgentRegistry(project, location).get_mcp_toolset(name, continue_uri=…) · get_remote_a2a_agent(…)
 ```
 
-**Agent-to-tool auth** (full detail: §5.1.1b)
+**Agent-to-tool auth** (full detail: Section 5.1.1b)
 ```
 Google APIs / remote MCP   Agent Identity (ADC) + product role + roles/mcp.toolUser
 Custom MCP on Cloud Run    ID token, aud = run.app URL · roles/run.invoker · X-Serverless-Authorization wins if both headers

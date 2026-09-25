@@ -764,7 +764,7 @@ gcloud agent-registry bindings create orch-to-crm --project=PROJECT_ID --locatio
 In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth_provider_binding { auth_provider, scopes, continue_uri }`. Bindings aren't available in `us`/`eu`.
 
 **H. Governance: what registration unlocks**
-- **Agent Gateway (egress, `AGENT_TO_ANYWHERE`)** attaches up to two registries: one global and one regional or multi-regional. Destinations must be **registered** or matched by an explicit unregistered-host rule; otherwise the default is **deny**. One gateway governs up to 5,000 registered resources. If the registry is regional, policies apply only to resources in that region (see §5.1).
+- **Agent Gateway (egress, `AGENT_TO_ANYWHERE`)** attaches up to two registries: one global and one regional or multi-regional. Destinations must be **registered** or matched by an explicit unregistered-host rule; otherwise the default is **deny**. One gateway governs up to 5,000 registered resources. If the registry is regional, policies apply only to resources in that region (see Section 5.1).
 - **IAM egress (allow) policies through IAP**, bound to registry resources:
   ```bash
   gcloud iap web set-iam-policy policy.json --project=PROJECT_ID \
@@ -785,7 +785,7 @@ In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth
   - **Semantic governance policies** and **Model Armor** run at the gateway on top of IAM.
   - For Google MCP servers, Model Armor floor settings can scan all traffic: `gcloud model-armor floorsettings update --full-uri=projects/P/locations/global/floorSetting --add-integrated-services=GOOGLE_MCP_SERVER --google-mcp-server-enforcement-type=INSPECT_AND_BLOCK`. If the agent and server are in different projects, floor settings in both projects mean Model Armor is invoked twice.
 - **Visibility:**
-  - Each MCP server's **Observability** tab. For the gateway's own Observability tab, see §5.1.
+  - Each MCP server's **Observability** tab. For the gateway's own Observability tab, see Section 5.1.
   - The **topology** graph, keyed by resource URI.
   - Agent Platform **Security** tab and per-resource **Security** tabs, which surface Security Command Center findings such as excessive permissions and toxic combinations.
 
@@ -841,7 +841,7 @@ In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth
 |---|---|
 | Governed **inside the registry** next to agents and MCP servers. `gcloud alpha agent-registry skills …`. Semantic search. ZIP ≤ 500 KB | Separate Agent Platform service consumed in ADK through `GCPSkillRegistry` + `SkillToolset` (`search_skills` / `load_skill`). Its own payload validation (ZIP ≤ 10 MB). The Skill Registry docs point to Agent Registry for central governance |
 
-Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, §3.2.3), which is a toolset factory for Google-managed MCP servers. It is **not** the governance catalog that Agent Gateway enforces against.
+Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, Section 3.2.3), which is a toolset factory for Google-managed MCP servers. It is **not** the governance catalog that Agent Gateway enforces against.
 
 **L. Gotchas (high-yield)**
 - **No introspection on manual entries.** New tools are invisible until you run `services update --mcp-server-spec-content=…`, which is a **full replace**.
