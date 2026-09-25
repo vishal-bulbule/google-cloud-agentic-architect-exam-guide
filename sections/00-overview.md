@@ -4,9 +4,9 @@
 
 ## 0.1 Exam blueprint and where to spend time
 
-> 📊 **Infographic:** Exam blueprint & platform map
+> 🧠 **Visual memory map:** Exam blueprint & platform map
 >
-> [![Exam blueprint & platform map](../infographics/00-exam-blueprint.png)](../infographics/00-exam-blueprint.png)
+> [![Exam blueprint & platform map](../visual-memory/00-exam-blueprint.png)](../visual-memory/00-exam-blueprint.png)
 
 | # | Section | Weight | Est. questions (of ~50–60) | Priority |
 |---|---|---|---|---|

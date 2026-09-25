@@ -11,9 +11,9 @@
 
 ### 4.1 Evaluating agents in development and in production
 
-> 📊 **Infographic:** Continuous evaluation lifecycle
+> 🧠 **Visual memory map:** Continuous evaluation lifecycle
 >
-> [![Continuous evaluation lifecycle](../infographics/10-eval-lifecycle.png)](../infographics/10-eval-lifecycle.png)
+> [![Continuous evaluation lifecycle](../visual-memory/10-eval-lifecycle.png)](../visual-memory/10-eval-lifecycle.png)
 
 #### 4.1.1 Why agent eval differs from model eval
 
@@ -266,9 +266,9 @@ Interpretation matrix: **low trajectory + low answer** → retrieval not invoked
 
 #### 4.2.1 Runtime selection
 
-> 📊 **Infographic:** Agent Runtime vs Cloud Run vs GKE
+> 🧠 **Visual memory map:** Agent Runtime vs Cloud Run vs GKE
 >
-> [![Agent Runtime vs Cloud Run vs GKE](../infographics/11-runtime-selection.png)](../infographics/11-runtime-selection.png)
+> [![Agent Runtime vs Cloud Run vs GKE](../visual-memory/11-runtime-selection.png)](../visual-memory/11-runtime-selection.png)
 
 Google's own guidance (Architecture Center "Choose your agentic AI architecture components"):
 
@@ -363,9 +363,9 @@ Gotchas:
 
 #### 4.2.3 Troubleshooting agent issues
 
-> 📊 **Infographic:** Troubleshooting agents in production
+> 🧠 **Visual memory map:** Troubleshooting agents in production
 >
-> [![Troubleshooting agents in production](../infographics/12-troubleshooting.png)](../infographics/12-troubleshooting.png)
+> [![Troubleshooting agents in production](../visual-memory/12-troubleshooting.png)](../visual-memory/12-troubleshooting.png)
 
 | Symptom | Likely cause | Diagnostic signal | Fix |
 |---|---|---|---|

@@ -143,9 +143,9 @@
 
 #### 2.1.b Using coding agents in secure sandboxes (GKE, Cloud Workstations, Antigravity)
 
-> 📊 **Infographic:** Sandbox isolation tiers
+> 🧠 **Visual memory map:** Sandbox isolation tiers
 >
-> [![Sandbox isolation tiers](../infographics/04-sandbox-tiers.png)](../infographics/04-sandbox-tiers.png)
+> [![Sandbox isolation tiers](../visual-memory/04-sandbox-tiers.png)](../visual-memory/04-sandbox-tiers.png)
 
 **Layer 1: the Antigravity terminal sandbox (local, per command)**
 - **OS primitives, no VM or Docker, no startup delay:**
@@ -300,9 +300,9 @@ spec:
 
 ### 2.2 Customizing coding agents for enterprise workflows
 
-> 📊 **Infographic:** Coding-agent customization primitives
+> 🧠 **Visual memory map:** Coding-agent customization primitives
 >
-> [![Coding-agent customization primitives](../infographics/03-coding-agent-primitives.png)](../infographics/03-coding-agent-primitives.png)
+> [![Coding-agent customization primitives](../visual-memory/03-coding-agent-primitives.png)](../visual-memory/03-coding-agent-primitives.png)
 
 #### 2.2.a Creating skills, plugins, extensions, hooks, rules, and subagents using Antigravity
 
@@ -392,9 +392,9 @@ globs: "*.proto, **/*.pb.go"                        # required for glob
 
 #### 2.2.b Deep dive — Antigravity rules, hooks and skills: paths, formats, when to use which
 
-> 📊 **Infographic:** Antigravity customization map
+> 🧠 **Visual memory map:** Antigravity customization map
 >
-> [![Antigravity customization map](../infographics/16-antigravity-customization.png)](../infographics/16-antigravity-customization.png)
+> [![Antigravity customization map](../visual-memory/16-antigravity-customization.png)](../visual-memory/16-antigravity-customization.png)
 
 This subsection goes one level deeper than 2.2.a. It covers exact paths, file formats, activation semantics and the hook I/O contract, because exam questions often turn on one path or one field value. Everything below comes from the antigravity.google docs (rules, skills, hooks, subagents, plugins, MCP, permissions, CLI settings, workflows migration, Gemini CLI migration) unless it is marked **(unverified)**.
 

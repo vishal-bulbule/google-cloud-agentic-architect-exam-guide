@@ -13,9 +13,9 @@
 
 #### 3.1.1 Selecting and configuring the model
 
-> 📊 **Infographic:** Model selection map
+> 🧠 **Visual memory map:** Model selection map
 >
-> [![Model selection map](../infographics/05-model-selection.png)](../infographics/05-model-selection.png)
+> [![Model selection map](../visual-memory/05-model-selection.png)](../visual-memory/05-model-selection.png)
 
 **Current Gemini line-up on Agent Platform (September 2026).** Generally available: Gemini 3.8 Flash ("workhorse… long-horizon coding and autonomous agents"), 3.7 Flash, 3.6 Flash, 3.5 Flash, **3.5 Flash-Lite** ("lightweight agentic workflows at top speeds and minimal cost"), 3.1 Flash-Lite (most cost-efficient), 2.5 Pro/Flash/Flash-Lite. Preview: Gemini 3.1 Pro (`gemini-3.1-pro-preview`) and Gemini 3 Flash (`gemini-3-flash-preview`). There are also specialised models: 3.8 Flash Cyber, 3.8 Live and 2.5 Flash Live for bidirectional audio, and the image models. ADK samples use the alias `gemini-flash-latest`.
 
@@ -200,9 +200,9 @@ root_agent = Workflow(name="triage", edges=[
 
 #### 3.1.3 Sessions and memory
 
-> 📊 **Infographic:** State, sessions & memory
+> 🧠 **Visual memory map:** State, sessions & memory
 >
-> [![State, sessions & memory](../infographics/07-state-memory.png)](../infographics/07-state-memory.png)
+> [![State, sessions & memory](../visual-memory/07-state-memory.png)](../visual-memory/07-state-memory.png)
 
 **Concepts.**
 - **Session**: one conversation thread, made up of `events` plus `state`.
@@ -338,9 +338,9 @@ Custom skills get a `private-` prefix. **Skill revisions are immutable**, and a 
 
 #### 3.2.1 RAG pipelines and vector retrieval
 
-> 📊 **Infographic:** RAG pipeline & backend chooser
+> 🧠 **Visual memory map:** RAG pipeline & backend chooser
 >
-> [![RAG pipeline & backend chooser](../infographics/08-rag-pipeline.png)](../infographics/08-rag-pipeline.png)
+> [![RAG pipeline & backend chooser](../visual-memory/08-rag-pipeline.png)](../visual-memory/08-rag-pipeline.png)
 
 **Pipeline stages:** ingest → parse → chunk → embed → index → retrieve (dense / sparse / hybrid + metadata filter) → **rerank** → ground the generation → (optionally) check grounding.
 
@@ -423,9 +423,9 @@ cfg = rag.RagRetrievalConfig(
 
 #### 3.2.2 Agent permissions: Agent Identity
 
-> 📊 **Infographic:** Protocols, registry & agent identity
+> 🧠 **Visual memory map:** Protocols, registry & agent identity
 >
-> [![Protocols, registry & agent identity](../infographics/09-protocols-identity-registry.png)](../infographics/09-protocols-identity-registry.png)
+> [![Protocols, registry & agent identity](../visual-memory/09-protocols-identity-registry.png)](../visual-memory/09-protocols-identity-registry.png)
 
 - **What it is.** Each agent gets a **SPIFFE-based, per-agent principal** tied to its hosting resource and lifecycle. It is not shared like a service account.
   - SPIFFE ID: `spiffe://TRUST_DOMAIN/resources/SERVICE/RESOURCE_PATH`
@@ -500,9 +500,9 @@ root_agent = LlmAgent(name="orchestrator", model="gemini-flash-latest",
 
 #### 3.2.4 Deep dive — Registering MCP servers in Agent Registry
 
-> 📊 **Infographic:** Agent Registry — registering MCP servers
+> 🧠 **Visual memory map:** Agent Registry — registering MCP servers
 >
-> [![Agent Registry — registering MCP servers](../infographics/17-agent-registry-mcp.png)](../infographics/17-agent-registry-mcp.png)
+> [![Agent Registry — registering MCP servers](../visual-memory/17-agent-registry-mcp.png)](../visual-memory/17-agent-registry-mcp.png)
 
 Registering an MCP server does three jobs. It makes the server and its tools **discoverable** (console, gcloud, the registry's own MCP server, ADK, Agent Studio). It gives **bindings** a target to point at (resource links and auth providers). And it makes the server a **governable destination**: an egress Agent Gateway denies anything that isn't registered, and IAM egress policies can only be bound to registered resources. If an MCP server isn't in the registry, the platform can't govern it.
 
@@ -912,9 +912,9 @@ Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, Section 3.2.3), whic
 
 #### 3.3.2 Multi-agent handoffs and workflows
 
-> 📊 **Infographic:** ADK orchestration patterns
+> 🧠 **Visual memory map:** ADK orchestration patterns
 >
-> [![ADK orchestration patterns](../infographics/06-adk-orchestration-patterns.png)](../infographics/06-adk-orchestration-patterns.png)
+> [![ADK orchestration patterns](../visual-memory/06-adk-orchestration-patterns.png)](../visual-memory/06-adk-orchestration-patterns.png)
 
 **Coordination primitive decision table**
 

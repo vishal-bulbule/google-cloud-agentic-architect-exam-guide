@@ -30,9 +30,9 @@
 
 ## 1.1 Configuring agentic workflows and behavior using low-code tools
 
-> 📊 **Infographic:** Which low-code surface?
+> 🧠 **Visual memory map:** Which low-code surface?
 >
-> [![Which low-code surface?](../infographics/01-low-code-surfaces.png)](../infographics/01-low-code-surfaces.png)
+> [![Which low-code surface?](../visual-memory/01-low-code-surfaces.png)](../visual-memory/01-low-code-surfaces.png)
 
 ### 1.1.a State-based workflows (pages, transition routes, event handlers)
 
@@ -165,9 +165,9 @@
 
 ## 1.2 Connecting enterprise data to Gemini Enterprise
 
-> 📊 **Infographic:** Gemini Enterprise — connecting data
+> 🧠 **Visual memory map:** Gemini Enterprise — connecting data
 >
-> [![Gemini Enterprise — connecting data](../infographics/02-ge-enterprise-data.png)](../infographics/02-ge-enterprise-data.png)
+> [![Gemini Enterprise — connecting data](../visual-memory/02-ge-enterprise-data.png)](../visual-memory/02-ge-enterprise-data.png)
 
 ### 1.2.a Securely connecting and querying proprietary data (Gemini Enterprise, Agent Search)
 

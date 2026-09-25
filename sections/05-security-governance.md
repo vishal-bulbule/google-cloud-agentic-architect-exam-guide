@@ -129,9 +129,9 @@ toolset = McpToolset(
 
 ### 5.1.1b Deep dive — Agent-to-tool authentication patterns
 
-> 📊 **Infographic:** Agent-to-tool authentication
+> 🧠 **Visual memory map:** Agent-to-tool authentication
 >
-> [![Agent-to-tool authentication](../infographics/18-agent-to-tool-auth.png)](../infographics/18-agent-to-tool-auth.png)
+> [![Agent-to-tool authentication](../visual-memory/18-agent-to-tool-auth.png)](../visual-memory/18-agent-to-tool-auth.png)
 
 The exam tests this area heavily. Almost every agent-to-tool auth question comes down to three decisions:
 
@@ -404,9 +404,9 @@ Deploy requirements from the docs: `"google-adk[agent-identity,mcp]>=2.7.1"` and
 
 ### 5.1.2 Principal Access Boundary (PAB) with Agent Identity
 
-> 📊 **Infographic:** Identity & access — which control?
+> 🧠 **Visual memory map:** Identity & access — which control?
 >
-> [![Identity & access — which control?](../infographics/14-identity-access-controls.png)](../infographics/14-identity-access-controls.png)
+> [![Identity & access — which control?](../visual-memory/14-identity-access-controls.png)](../visual-memory/14-identity-access-controls.png)
 
 - **What PAB is.** A policy attached to a **principal set** that defines which resources those principals are *eligible* to access. **It never grants access.** Access requires **allow AND not deny AND inside the PAB**. Use it to stop an agent from reaching resources outside a boundary (a folder, the org, a project) **regardless of what allow policies say**, for example an over-broad grant or a role granted in a foreign org.
 - **Agent-relevant principal sets you can bind a PAB to:**
@@ -614,9 +614,9 @@ gcloud iam access-policies create agent-egress --details-rules=policy.json --pro
 
 ### 5.2.1 Safety frameworks and guardrails: layered defense
 
-> 📊 **Infographic:** Guardrail layers
+> 🧠 **Visual memory map:** Guardrail layers
 >
-> [![Guardrail layers](../infographics/15-guardrail-layers.png)](../infographics/15-guardrail-layers.png)
+> [![Guardrail layers](../visual-memory/15-guardrail-layers.png)](../visual-memory/15-guardrail-layers.png)
 
 The ADK safety guidance lists these layers: identity and authorization, in-tool guardrails, Gemini safety features, callbacks and plugins, Gemini-as-judge, sandboxed code execution, evaluation and tracing, and network controls/VPC-SC. Map each to the threat it handles.
 
@@ -679,9 +679,9 @@ The ADK safety guidance lists these layers: identity and authorization, in-tool 
 
 ## Defense-in-depth reference architecture
 
-> 📊 **Infographic:** Defense in depth — the request path
+> 🧠 **Visual memory map:** Defense in depth — the request path
 >
-> [![Defense in depth — the request path](../infographics/13-defense-in-depth.png)](../infographics/13-defense-in-depth.png)
+> [![Defense in depth — the request path](../visual-memory/13-defense-in-depth.png)](../visual-memory/13-defense-in-depth.png)
 
 ```
 [User] --SSO (Cloud Identity / Workforce IdF)--> [Gemini Enterprise app  |  custom web app / CLI client]
