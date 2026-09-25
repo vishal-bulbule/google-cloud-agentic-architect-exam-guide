@@ -95,3 +95,5 @@ Hands-on walkthroughs from three [TechTrapture YouTube](https://youtube.com/@tec
 ## Connect
 
 [YouTube](https://youtube.com/@techtrapture) · [LinkedIn](https://www.linkedin.com/in/vishal-bulbule/) · [Medium](https://vishalbulbule.medium.com/) · [X](https://x.com/vishal__bulbule)
+
+[![Views](https://hits.sh/github.com/vishal-bulbule/google-cloud-agentic-architect-exam-guide.svg?label=views&color=0c56dc)](https://hits.sh/github.com/vishal-bulbule/google-cloud-agentic-architect-exam-guide/)
