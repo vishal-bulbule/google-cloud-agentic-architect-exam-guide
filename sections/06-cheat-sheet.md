@@ -113,6 +113,49 @@ Production drift ...................... online monitors → Cloud Monitoring ale
 11. VPC-SC: Agent Runtime project must be **in the perimeter before deploy**; Agent Gateway/IAM agent policies have limited VPC-SC support.
 12. Changing GE identity provider ⇒ **recreate ingested data stores**, users lose chat history.
 
+### 6.5 Heavily tested — quick recall
+
+**Antigravity customization** (full detail: §2.2.b)
+```
+Workspace  .agents/rules/*.md · .agents/skills/<name>/SKILL.md · .agents/hooks.json · .agents/mcp_config.json · .agents/agents/*.md
+Global     ~/.gemini/config/{rules,skills,hooks.json,mcp_config.json}   (CLI skills: ~/.gemini/antigravity-cli/skills/)
+Rule trigger   always_on | model_decision (needs description) | glob (needs globs) | manual (@-mention)   — camelCase = silently dropped
+Rule limits    24 KB/file · 20k-token budget for global + always_on rules · rules/ scanned flat (nested → rules.json)
+Hook events    PreToolUse · PostToolUse (matcher = tool-name regex) · PreInvocation · PostInvocation · Stop
+Hook gate      PreToolUse deny = block · PostToolUse can't block · Stop → decision "continue" = "don't finish until green"
+Hook timeout   seconds (default 30)  ≠ Gemini CLI milliseconds
+Skill          only description required · progressive disclosure: metadata → SKILL.md body → scripts/references on demand
+Workflows      deprecated → skills (/migrate-workflows), retired 2026-11-01
+Enforce/block → hook · convention → rule · procedure + scripts → skill · separate context → subagent · ship to devs → plugin
+```
+
+**Agent Registry — MCP servers** (full detail: §3.2.4)
+```
+Enable        gcloud services enable agentregistry.googleapis.com   (also turns on its own MCP server)
+Auto (same project only)  Google remote MCP servers (global, on API enable) · Cloud Run --functional-type=mcp-server
+                          · GKE label registry.gke.io/functional-type: MCP_SERVER · Agent Runtime / Gemini Enterprise agents
+Manual        gcloud agent-registry services create NAME --location=L --mcp-server-spec-type=tool-spec
+                --mcp-server-spec-content=@toolspec.json --interfaces=url=URL,protocolBinding=jsonrpc
+              tool spec = tools/list shape · ≤10 KB · ≤100 tools · never re-scanned → update the spec yourself
+Write via Service, read via McpServer/Agent/Endpoint views · search = keyword/prefix (semantic = skills only)
+Bind auth     gcloud agent-registry bindings create … --auth-provider=…   (needs roles/agentregistry.admin)
+Govern        Agent Gateway only reaches REGISTERED destinations · CEL on mcp.tool.isReadOnly · roles/iap.egressor
+Traps         us/eu multi-regions: no manual registration or bindings · URN ≠ IAM principal · don't give agents editor/admin
+ADK           AgentRegistry(project, location).get_mcp_toolset(name, continue_uri=…) · get_remote_a2a_agent(…)
+```
+
+**Agent-to-tool auth** (full detail: §5.1.1b)
+```
+Google APIs / remote MCP   Agent Identity (ADC) + product role + roles/mcp.toolUser
+Custom MCP on Cloud Run    ID token, aud = run.app URL · roles/run.invoker · X-Serverless-Authorization wins if both headers
+3rd-party API key / 2LO    Auth Manager auth provider (vault) — never in prompt/state/code
+Act as the user (3LO)      Auth Manager OAuth delegation · consent · redirect = …/authProviders/NAME/oauthcallback · continue_uri = back to your app
+Gemini Enterprise agents   authorization resource → toolAuthorizations · user token via external_access_token_key
+GKE self-hosted            Workload Identity Federation (Agent Identity not on GKE)
+Grant                      roles/agentidentity.user on the auth provider · register provider in set_up() when deploying
+Tokens                     CAA mTLS + DPoP binding → stolen token useless outside runtime
+```
+
 ### 6.4 Items flagged unverified by research (don't over-invest)
 
 - "Agent vs human mode" in Agents CLI — best mapping is interactive/agent-assisted vs `--yes`/manual/`--json`; no literal flag found.

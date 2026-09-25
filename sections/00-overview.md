@@ -1,6 +1,6 @@
 # Google Cloud Professional Agentic Architect — Study Guide
 
-> Built 2026-09-25 from the official exam guide, Google Developer Knowledge corpus (docs.cloud.google.com, adk.dev, antigravity.google), and ADK `llms-full.txt`. Product names are the **2026 Agent Platform names** — the exam uses these, not the Vertex AI names.
+> Built 2026-09-25 from the official exam guide, the Google Developer Knowledge corpus (docs.cloud.google.com, adk.dev, antigravity.google), and ADK `llms-full.txt`. Product names are the **2026 Agent Platform names** — the exam uses these, not the Vertex AI names.
 
 ## 0.1 Exam blueprint and where to spend time
 
@@ -10,9 +10,9 @@
 
 | # | Section | Weight | Est. questions (of ~50–60) | Priority |
 |---|---|---|---|---|
-| 3 | Developing custom agents (ADK, models, sessions/memory, RAG, Agent Identity, Registry, MCP/A2A, multi-agent) | **~33%** | 17–20 | Highest — breadth is huge |
+| 3 | Developing custom agents (ADK, models, sessions/memory, RAG, Agent Identity, Registry, MCP/A2A, multi-agent) | **~33%** | 17–20 | Highest — the biggest section and the broadest |
 | 4 | Evaluating and deploying (evalsets, Gen AI eval, Agent Runtime vs Cloud Run vs GKE, troubleshooting, observability) | **~22%** | 11–13 | High |
-| 2 | Coding agents (Antigravity, Claude Code on GCP, MCP/skills/hooks/subagents, sandboxes, Agents CLI) | **~17%** | 8–10 | High — newest product surface, least muscle memory |
+| 2 | Coding agents (Antigravity, Claude Code on GCP, MCP/skills/hooks/subagents, sandboxes, Agents CLI) | **~17%** | 8–10 | High — newest product surface, least familiar to most candidates |
 | 5 | Security and governance (OAuth/Auth Manager, PAB, Agent Gateway, Model Armor, HITL, identity propagation) | **~15%** | 7–9 | Medium-high — many new products in preview |
 | 1 | Low-code (Agent Designer, CX Agent Studio flows/pages/routes, Gemini Enterprise data connectors, multimodal ingestion) | **~13%** | 6–8 | Medium — easy points if you learn the vocabulary |
 
@@ -80,7 +80,7 @@ OPTIMIZE     Agent evaluation (ADK evalsets, Agent Platform Evals, autoraters)
 - **Auth Manager** (Agent Identity auth manager): centralized credential vault + auth broker; API key, OAuth client ID/secret, or **OAuth delegation on behalf of a user**; handles consent dialog; access revocation; all access attributable to the agent's SPIFFE ID.
 - **Agent Gateway**: networking component that governs user→agent, agent→tool, agent→agent traffic; enforces IAM (Unified) Access policies via **IAP**; run **DRY_RUN** first (logs violations to Cloud Audit Logs, doesn't block) then **ENFORCE**. IAM agent-policy pages state **no VPC Service Controls support**; perimeter enforcement of gateway traffic exists only for gateways created after 2026-09-08 using an agent connectivity template in `ALL_TRAFFIC` mode (see §5). Two separate dry-runs: `iamEnforcementMode: DRY_RUN` (access) and `INSPECT_ONLY` (Model Armor). Launch stage: Private Preview at announcement.
 - **Agent Identity principal changes on redeploy** (new `reasoningEngines` ID ⇒ new principal ⇒ old IAM grants orphaned) — grant baseline roles to the project `principalSet`, re-bind sensitive roles post-deploy via `spec.effectiveIdentity`.
-- **Agent Registry**: catalog of **Agent, McpServer, Endpoint, Skill, SkillRevision, Publisher** resources; auto-registration from supported runtimes + manual registration; keyword/prefix/**semantic** search; `gcloud agent-registry mcp-servers list|describe`; Terraform `google_agent_registry_*`; console gives ADK code snippets per tool; Observability tab (latency, traffic, errors, token spend).
+- **Agent Registry**: catalog of **Agent, McpServer, Endpoint, Skill, SkillRevision, Publisher** resources; auto-registration (same project only) from Agent Runtime, Cloud Run `--functional-type`, labelled GKE workloads and Google remote MCP servers + manual registration for everything else; keyword/prefix search (**semantic search only for skills**); `gcloud agent-registry mcp-servers list|describe`; Terraform `google_agent_registry_*`; console gives ADK code snippets per tool; Observability tab (latency, traffic, errors, token spend).
 - **Skill Registry** (Preview): skill = zip with **SKILL.md** (YAML front matter `name` ≤ 64 chars lowercase/hyphen, `description` ≤ 1024 chars); zip ≤ 10 MB, ≤ 500 MB unzipped, ≤ 10k items, ≤ 8 levels deep, no symlinks; Skill (mutable) vs **SkillRevision** (immutable); `skills:retrieve` = semantic search; built-in `gcp-skill-registry` skill; IDs can't start with `gcp-`; **no VPC-SC, no CMEK**; regions us-central1, europe-west4, us-east5.
 - **Agent Platform remote MCP server** is GA; Gemini Embedding 2 (`gemini-embedding-2`) GA; Deep Research Agent (prebuilt) runs on Gemini 3.1 Pro.
 

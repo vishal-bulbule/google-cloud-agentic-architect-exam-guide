@@ -1,6 +1,6 @@
 # Google Cloud Professional Agentic Architect — Study Guide
 
-> Built 2026-09-25 from the official exam guide, Google Developer Knowledge corpus (docs.cloud.google.com, adk.dev, antigravity.google), and ADK `llms-full.txt`. Product names are the **2026 Agent Platform names** — the exam uses these, not the Vertex AI names.
+> Built 2026-09-25 from the official exam guide, the Google Developer Knowledge corpus (docs.cloud.google.com, adk.dev, antigravity.google), and ADK `llms-full.txt`. Product names are the **2026 Agent Platform names** — the exam uses these, not the Vertex AI names.
 
 ## 0.1 Exam blueprint and where to spend time
 
@@ -10,9 +10,9 @@
 
 | # | Section | Weight | Est. questions (of ~50–60) | Priority |
 |---|---|---|---|---|
-| 3 | Developing custom agents (ADK, models, sessions/memory, RAG, Agent Identity, Registry, MCP/A2A, multi-agent) | **~33%** | 17–20 | Highest — breadth is huge |
+| 3 | Developing custom agents (ADK, models, sessions/memory, RAG, Agent Identity, Registry, MCP/A2A, multi-agent) | **~33%** | 17–20 | Highest — the biggest section and the broadest |
 | 4 | Evaluating and deploying (evalsets, Gen AI eval, Agent Runtime vs Cloud Run vs GKE, troubleshooting, observability) | **~22%** | 11–13 | High |
-| 2 | Coding agents (Antigravity, Claude Code on GCP, MCP/skills/hooks/subagents, sandboxes, Agents CLI) | **~17%** | 8–10 | High — newest product surface, least muscle memory |
+| 2 | Coding agents (Antigravity, Claude Code on GCP, MCP/skills/hooks/subagents, sandboxes, Agents CLI) | **~17%** | 8–10 | High — newest product surface, least familiar to most candidates |
 | 5 | Security and governance (OAuth/Auth Manager, PAB, Agent Gateway, Model Armor, HITL, identity propagation) | **~15%** | 7–9 | Medium-high — many new products in preview |
 | 1 | Low-code (Agent Designer, CX Agent Studio flows/pages/routes, Gemini Enterprise data connectors, multimodal ingestion) | **~13%** | 6–8 | Medium — easy points if you learn the vocabulary |
 
@@ -80,7 +80,7 @@ OPTIMIZE     Agent evaluation (ADK evalsets, Agent Platform Evals, autoraters)
 - **Auth Manager** (Agent Identity auth manager): centralized credential vault + auth broker; API key, OAuth client ID/secret, or **OAuth delegation on behalf of a user**; handles consent dialog; access revocation; all access attributable to the agent's SPIFFE ID.
 - **Agent Gateway**: networking component that governs user→agent, agent→tool, agent→agent traffic; enforces IAM (Unified) Access policies via **IAP**; run **DRY_RUN** first (logs violations to Cloud Audit Logs, doesn't block) then **ENFORCE**. IAM agent-policy pages state **no VPC Service Controls support**; perimeter enforcement of gateway traffic exists only for gateways created after 2026-09-08 using an agent connectivity template in `ALL_TRAFFIC` mode (see §5). Two separate dry-runs: `iamEnforcementMode: DRY_RUN` (access) and `INSPECT_ONLY` (Model Armor). Launch stage: Private Preview at announcement.
 - **Agent Identity principal changes on redeploy** (new `reasoningEngines` ID ⇒ new principal ⇒ old IAM grants orphaned) — grant baseline roles to the project `principalSet`, re-bind sensitive roles post-deploy via `spec.effectiveIdentity`.
-- **Agent Registry**: catalog of **Agent, McpServer, Endpoint, Skill, SkillRevision, Publisher** resources; auto-registration from supported runtimes + manual registration; keyword/prefix/**semantic** search; `gcloud agent-registry mcp-servers list|describe`; Terraform `google_agent_registry_*`; console gives ADK code snippets per tool; Observability tab (latency, traffic, errors, token spend).
+- **Agent Registry**: catalog of **Agent, McpServer, Endpoint, Skill, SkillRevision, Publisher** resources; auto-registration (same project only) from Agent Runtime, Cloud Run `--functional-type`, labelled GKE workloads and Google remote MCP servers + manual registration for everything else; keyword/prefix search (**semantic search only for skills**); `gcloud agent-registry mcp-servers list|describe`; Terraform `google_agent_registry_*`; console gives ADK code snippets per tool; Observability tab (latency, traffic, errors, token spend).
 - **Skill Registry** (Preview): skill = zip with **SKILL.md** (YAML front matter `name` ≤ 64 chars lowercase/hyphen, `description` ≤ 1024 chars); zip ≤ 10 MB, ≤ 500 MB unzipped, ≤ 10k items, ≤ 8 levels deep, no symlinks; Skill (mutable) vs **SkillRevision** (immutable); `skills:retrieve` = semantic search; built-in `gcp-skill-registry` skill; IDs can't start with `gcp-`; **no VPC-SC, no CMEK**; regions us-central1, europe-west4, us-east5.
 - **Agent Platform remote MCP server** is GA; Gemini Embedding 2 (`gemini-embedding-2`) GA; Deep Research Agent (prebuilt) runs on Gemini 3.1 Pro.
 
@@ -786,7 +786,7 @@ spec:
 - **`/boost`** is a three-tier multi-agent orchestrator (Orchestrator → DeepCoder / DeepInvestigator → workers) for hard concurrency bugs and non-trivial refactors, with independent verification loops. It requires a paid tier.
 - **`/teamwork-preview`** coordinates multiple agents for large multi-file projects, with milestone decomposition and verification.
 - **Recovery:** `/rewind` (`/undo`), `/fork`, `/resume`, and `Esc` to interrupt a turn.
-- **Deterministic quality gates:** a `PostToolUse` hook on `write_to_file`/`replace_file_content` runs a linter or formatter. A `PreToolUse` hook on `run_command` can `deny`. A `PostInvocation` hook can `force_continue` until tests pass (a verification-loop pattern).
+- **Deterministic quality gates:** a `PostToolUse` hook on `write_to_file`/`replace_file_content` runs a linter or formatter. A `PreToolUse` hook on `run_command` can `deny`. A `Stop` hook returning `decision: "continue"` keeps the agent working until tests pass — the "don't finish until green" gate (see 2.2.b). `PostInvocation` + `force_continue` also works but fires after every model call.
 - **Evidence from tools via MCP:**
   - SonarQube, Wiz, CrowdStrike and Splunk MCP servers for security findings.
   - Chrome DevTools MCP for front-end performance traces.
@@ -801,7 +801,7 @@ spec:
 - **LLM patching without exploit validation** is fast but risks false positives. CodeMender-style validation costs compute but removes alert fatigue.
 
 **Exam signals**
-- "Ensure every edit is linted/tests pass before the agent continues": **hooks** (`PostToolUse` / `PostInvocation`). Rules alone don't enforce anything.
+- "Ensure every edit is linted/tests pass before the agent continues": **hooks** (`PostToolUse` for per-edit lint, `Stop` → `continue` for the tests-green gate). Rules alone don't enforce anything.
 - "Large refactor across 40 services without agents stepping on each other": subagents with `branch` (worktree) isolation, or `/teamwork-preview`.
 - "Prioritize only exploitable vulnerabilities and auto-generate verified fixes": **CodeMender**.
 - "Human must approve the approach before files change": Planning Mode + Request Review.
@@ -905,7 +905,347 @@ globs: "*.proto, **/*.pb.go"                        # required for glob
 - "Rule isn't being applied" usually means missing frontmatter, a camelCase trigger, or a nested folder not listed in `rules.json`.
 - "Rules suddenly partially ignored in a large monorepo" means the 20k-token budget demoted them to pointers.
 
-#### 2.2.b Augmenting Antigravity with Agents CLI (build, scale, govern, optimize deployed agents)
+#### 2.2.b Deep dive — Antigravity rules, hooks and skills: paths, formats, when to use which
+
+> 📊 **Infographic:** Antigravity customization map
+>
+> [![Antigravity customization map](infographics/16-antigravity-customization.png)](infographics/16-antigravity-customization.png)
+
+This subsection goes one level deeper than 2.2.a. It covers exact paths, file formats, activation semantics and the hook I/O contract, because exam questions often turn on one path or one field value. Everything below comes from the antigravity.google docs (rules, skills, hooks, subagents, plugins, MCP, permissions, CLI settings, workflows migration, Gemini CLI migration) unless it is marked **(unverified)**.
+
+**Surface availability (a detail that can decide a question)**
+
+| Feature | Antigravity 2.0 (app) | Antigravity CLI (`agy`) | Antigravity IDE |
+|---|---|---|---|
+| Rules, skills, hooks, MCP, plugins | Yes | Yes | Yes |
+| Custom subagents (`.agents/agents/`) | Yes | Yes | Not listed on the subagents page |
+| New permission engine (`action(target)`) | Yes (macOS/Linux) | Yes | Not listed on the permissions page |
+| `/migrate-workflows` | Yes (the docs say "Open Antigravity 2.0") | — | Workflows originated here |
+
+**1. File-system map**
+
+Workspace scope. Commit it to the repo and the whole team shares it.
+
+```text
+<repo>/
+├── AGENTS.md                  # rule, no frontmatter, always on (directory scope)
+├── GEMINI.md                  # same semantics as AGENTS.md
+├── .agents/                   # default customization dir (legacy .agent/ still read)
+│   ├── AGENTS.md | GEMINI.md  # also discovered here
+│   ├── rules/                 # FLAT scan: only immediate *.md children
+│   │   ├── typescript.md      # YAML frontmatter with `trigger:` REQUIRED
+│   │   └── frontend/react.md  # IGNORED unless listed in rules.json
+│   ├── rules.json             # inherits / entries / include_only / exclude
+│   ├── skills/
+│   │   └── <skill-name>/
+│   │       ├── SKILL.md       # required (frontmatter: description required)
+│   │       ├── scripts/       # optional executables
+│   │       ├── references/    # optional docs (Antigravity docs also show examples/)
+│   │       └── assets/        # optional templates/data (Antigravity docs: resources/)
+│   ├── hooks.json             # workspace hooks
+│   ├── agents/
+│   │   ├── <name>.md          # custom subagent (frontmatter + system prompt)
+│   │   └── <name>/agent.md    # folder form (what the CLI /agents panel suggests)
+│   ├── plugins/
+│   │   └── <plugin>/plugin.json …
+│   ├── mcp_config.json        # workspace MCP servers (also auto-discovered by the SDK)
+│   └── workflows/<name>.md    # LEGACY: deprecated, retired 2026-11-01
+└── services/payments/
+    ├── AGENTS.md              # directory-scoped rule, loaded when the agent touches files here
+    └── .agents/rules/*.md     # directory-scoped modular rules
+```
+
+Global (user) scope. It applies to every workspace on the machine. The shared home `~/.gemini/config/` is used by all three surfaces. The CLI adds its own home.
+
+```text
+~/.gemini/
+├── AGENTS.md | GEMINI.md          # global always-on rules (no frontmatter)
+├── config/                        # shared by 2.0, CLI and IDE
+│   ├── AGENTS.md | GEMINI.md      # also global always-on
+│   ├── rules/*.md                 # modular global rules (frontmatter required)
+│   ├── skills/<name>/SKILL.md     # global skills: 2.0 + IDE (CLI uses its own path, below)
+│   ├── hooks.json                 # global hooks (all surfaces)
+│   ├── agents/<name>.md | <name>/agent.md   # global subagents
+│   ├── plugins/<plugin>/          # global plugins: 2.0 + IDE (manual drop-in)
+│   ├── mcp_config.json            # global MCP servers (all surfaces)
+│   └── workflows/<name>.md        # LEGACY global workflows
+├── antigravity-cli/               # CLI home = CLI <app_data_dir>
+│   ├── settings.json              # permissions{allow,deny,ask}, toolPermission,
+│   │                              #   enableTerminalSandbox, hooks (also allowed here) …
+│   ├── keybindings.json
+│   ├── rules/*.md                 # extra global rules (CLI only)
+│   ├── skills/<name>/SKILL.md     # global skills for the CLI
+│   ├── plugins/<plugin>/          # where `agy plugin install` stages plugins
+│   │   └── rules/ skills/ agents/ hooks.json mcp_config.json
+│   └── brain/<conversationId>/.system_generated/logs/transcript.jsonl
+├── antigravity/                   # 2.0 <app_data_dir>
+│   ├── mcp_oauth_tokens.json      # MCP OAuth tokens
+│   ├── skills/                    # LEGACY global skills (IDE still reads it)
+│   └── brain/<conversationId>/…   # transcripts + artifacts
+└── antigravity-ide/               # IDE <app_data_dir> (transcripts)
+```
+
+Plugin layout. A plugin is the distribution unit, and it has the same shape wherever it is installed.
+
+```text
+<plugin-name>/
+├── plugin.json        # REQUIRED marker/manifest: {"$schema","name","description"}
+├── mcp_config.json    # optional
+├── hooks.json         # optional
+├── skills/<skill>/SKILL.md
+├── agents/<agent>.md
+└── rules/<rule>.md
+```
+- `plugin.json` allows only `name` and `description` (`additionalProperties: false`). `name` matches `^[a-zA-Z0-9-_]+$`. It is **required for the CLI**. In 2.0 and the IDE it defaults to the folder name. `$schema` is `https://antigravity.google/schemas/v1/plugin.json`.
+- **Permissions location.** The CLI keeps them in `~/.gemini/antigravity-cli/settings.json`. Antigravity 2.0 sets them in **Settings → General → Permission Settings**, with per-project overrides under **Settings → Projects**. The backing file path for 2.0 is not documented **(unverified)**. No workspace-level permissions file is documented.
+
+**Precedence and merge rules between scopes**
+
+| Primitive | How scopes combine | Conflict resolution |
+|---|---|---|
+| Rules | **Cumulative.** Global, workspace and directory rules are all combined into the prompt | More specific directory rules win. Documented precedence order: directory-scoped, then global |
+| Skills | Workspace and global are both listed | A skill beats a legacy workflow with the same name. Same-named skills in two scopes: not documented **(unverified)** |
+| Hooks | Workspace, global, CLI `settings.json` and plugin `hooks.json` all load (`/hooks` shows the effective set) | Ordering between multiple matching hooks is not documented **(unverified)** |
+| MCP | Global plus workspace `mcp_config.json` (plus plugin) | Same server name in two scopes: not documented **(unverified)** |
+| Permissions | Preset (Default / Request Review / Turbo), with explicit rules layered on top | **Deny > Ask > Allow**. Explicit rules always beat preset defaults. A subagent inherits its parent's scopes and sandbox |
+
+**2. Rules (in depth)**
+
+- **Two file types:**
+  - `AGENTS.md` / `GEMINI.md` are plain Markdown with **no frontmatter**. They are always on for their directory scope.
+  - `rules/*.md` must **start with YAML frontmatter** that declares a valid `trigger`. A missing frontmatter or an invalid value (`alwaysOn`, `modelDecision`) means the rule is **silently discarded**.
+- **Frontmatter fields:**
+
+| Field | Required | Notes |
+|---|---|---|
+| `trigger` | Yes | `always_on` \| `model_decision` \| `glob` \| `manual` (snake_case, exact) |
+| `description` | Required for `model_decision`, recommended for all | For `model_decision`, it becomes the index entry the model sees. It is also the fallback pointer text when an `always_on` rule is demoted by the budget |
+| `globs` (singular `glob` also accepted) | Required for `glob` | A comma-separated string, e.g. `"*.proto, **/*.pb.go"`. **Quote patterns that start with `*`**, because YAML treats `*` as an alias anchor |
+
+- **Activation modes: what is loaded, and when:**
+
+| `trigger` | Loaded up front | Full body enters context | Best for |
+|---|---|---|---|
+| `always_on` | Full content, **every turn** | Always | Short, universal invariants. The docs prefer putting these in `AGENTS.md` |
+| `model_decision` | Only **path + `description`** (progressive disclosure) | When the agent judges the task matches the description | Long domain guides (migrations, API style) that are only sometimes relevant |
+| `glob` | Nothing until triggered | When the agent **interacts with a file matching `globs`** | Language- or file-type-specific conventions (`*.proto`, `*.tf`) |
+| `manual` | Nothing | **Only when you `@`-mention it in chat** | Release checklists, audit rubrics, one-off playbooks |
+
+- **Nesting and discovery.** When Antigravity reads or edits a file, it walks **up from that file's folder to the workspace root**. At each level it loads `<dir>/AGENTS.md|GEMINI.md`, `<dir>/.agents/AGENTS.md|GEMINI.md`, and `<dir>/.agents/rules/*.md` (legacy `<dir>/.agent/rules/*.md`). A monorepo can therefore give `services/payments/` its own rules, and they appear only when the agent works there.
+- **Flat scan.** `.agents/rules/frontend/react.md` is ignored unless it is registered in `.agents/rules.json`:
+```json
+{ "inherits": [ { "path": "../shared-config/.agents/rules.json" } ],
+  "entries":  [ { "path": "../shared-rules", "exclude": ["deprecated_rules.md", "legacy/"] },
+                { "path": "rules", "include_only": ["frontend/react.md"] } ] }
+```
+  `rules.json` is also the documented way to **share rules across repos** (`inherits`), keeping their frontmatter and triggers intact.
+- **Includes:**
+  - `@[label](path)` **inlines** the target file before prompt evaluation and size checks. The path is relative to the rule file, and `~/` expands to home. Frontmatter in the included file is stripped.
+  - `@path` does **not** inline anything. It rewrites the reference to a canonical absolute workspace path (`@/workspace/path`).
+- **Limits:**
+  - **24,000 bytes per rule file**, measured after includes are expanded. Anything beyond that is truncated.
+  - A **20,000-token aggregate budget** for all active **global + `always_on`** rules. This is separate from the "customization budget" used by skills and MCP. When it is exceeded, the **largest** files are demoted to pointers (`- <path>: <description>`) that the agent reads on demand.
+- **UI.** 2.0: Customizations → **Rules** tab → **+ Global** / **+ Workspace**. IDE: **…** → Customizations → Rules. CLI: edit the files directly.
+- **Example (`.agents/rules/db-migrations.md`):**
+```markdown
+---
+trigger: model_decision
+description: "Apply whenever writing or reviewing database migrations or SQL schema changes."
+---
+# Database migration rules
+1. Never drop or rename a column in one deployment — use expand-and-contract.
+2. Always create indexes on existing PostgreSQL tables with CONCURRENTLY.
+@[Schema conventions](../../docs/schema-conventions.md)
+```
+
+**3. Skills (in depth)**
+
+- **Standard.** Skills follow the open Agent Skills standard (agentskills.io), which Antigravity adopted in May 2026. A skill is a **directory** containing `SKILL.md`.
+- **Frontmatter:**
+
+| Field | Antigravity docs | Open spec (agentskills.io) |
+|---|---|---|
+| `name` | Optional. Lowercase with hyphens. **Defaults to the folder name** | Required. 1–64 chars, `a-z0-9-`, no leading, trailing or double hyphens, **must match the folder name** |
+| `description` | **Required.** It is what the agent sees when deciding. Write it in third person with trigger keywords | Required, 1–1024 chars |
+| `license`, `compatibility` (≤500 chars), `metadata` (string map), `allowed-tools` (experimental) | Not documented by Antigravity | Optional. Whether Antigravity honors `allowed-tools` is **(unverified)** |
+
+  **Portability tip:** always set `name` equal to the folder name. Antigravity doesn't require it, but other skill-compliant tools and Skill Registry validation (≤64 chars, lowercase/hyphen, `description` ≤1024) do.
+- **Progressive disclosure (three layers):**
+  1. **Discovery.** At conversation start, only `name` + `description` for every skill are in context (the spec budgets about 100 tokens per skill).
+  2. **Activation.** When the task matches, the agent reads the whole `SKILL.md` body (the spec recommends under 5,000 tokens and under 500 lines).
+  3. **Resources.** Files in `scripts/`, `references/`, `assets/` (or `examples/`, `resources/`) are read or run **only when the body tells the agent to**. The docs' best practice is to treat scripts as **black boxes**: run `script --help` rather than reading the source, which saves context. Scripts run through the normal `run_command` tool, so they go through **permissions, the terminal sandbox and `PreToolUse` hooks** like any other command.
+- **Invocation:**
+  - **Autonomous:** the model matches on the description.
+  - **Explicit:** `/<skill-name>` in 2.0 and the CLI. The CLI auto-creates a slash command for every skill, and `/skills` lists them. You can also mention the skill by name in the prompt.
+- **Locations:** workspace `.agents/skills/<name>/`. Global `~/.gemini/config/skills/<name>/` (2.0, IDE, plus the legacy `~/.gemini/antigravity/skills/` in the IDE). CLI global `~/.gemini/antigravity-cli/skills/<name>/`. Plugin skills in `<plugin>/skills/`.
+- **Sharing and distribution, from narrowest to widest:**
+  1. **Commit** `.agents/skills/` to the repo.
+  2. Ship a **plugin**: drop it in `.agents/plugins/` or `~/.gemini/config/plugins/`, or run `agy plugin install <path|git-url>`. For example, `agy plugin install https://github.com/GoogleChrome/modern-web-guidance`.
+  3. Use **Build with Google** curated bundles: Settings → Customizations → Build with Google Plugins (for example Firebase, Modern Web Guidance, Antigravity SDK).
+  4. **Agents CLI:** `uvx google-agents-cli setup` installs the `google-agents-cli-*` skills into every detected coding agent (Antigravity, Claude Code, Codex, Cursor, …). The default is global, and `--workspace` installs project-level. `npx skills add google/agents-cli` installs the skills only.
+  5. **Skill Registry / Agent Registry** hold governed skills for **ADK agents at runtime**, through `SkillToolset` + `GCPSkillRegistry`, not for loading into the Antigravity IDE (see 2.2.c). **Exam trap:** the registry answers "govern and version skills for deployed agents". A plugin answers "distribute skills to developers' coding agents".
+- **Example (`.agents/skills/deploy-staging/SKILL.md`):**
+```markdown
+---
+name: deploy-staging
+description: Deploys the current build to the staging Cloud Run service and smoke-tests it. Use when asked to deploy, release to staging, or verify a PR preview.
+---
+# Deploy to staging
+1. Run `scripts/preflight.sh --help`, then `scripts/preflight.sh` (lint + unit tests). Stop on failure.
+2. Build and deploy with `scripts/deploy.sh staging` — do not hand-write gcloud flags.
+3. Run the smoke checks listed in `references/smoke-checks.md` and report results.
+```
+
+**4. Hooks (in depth)**
+
+- **Files:**
+  - Workspace: `.agents/hooks.json`.
+  - Global: `~/.gemini/config/hooks.json`.
+  - The CLI also reads a `hooks` section in `~/.gemini/antigravity-cli/settings.json`.
+  - Plugins can ship their own `hooks.json`.
+  - To inspect them, use `/hooks` (CLI), Settings → Customizations → Hooks (2.0), or **…** → Customizations → Hooks (IDE).
+- **Schema.** The top-level keys are **named hooks**. Each named hook maps event names to handler arrays. `"enabled": false` disables a hook without deleting it.
+```json
+{
+  "block-secret-writes": {
+    "PreToolUse": [
+      { "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [ { "type": "command", "command": "./scripts/hooks/deny-secrets.sh", "timeout": 5 } ] }
+    ]
+  },
+  "tests-must-pass": {
+    "Stop": [ { "type": "command", "command": "./scripts/hooks/tests-gate.sh", "timeout": 120 } ]
+  },
+  "lint-reminder": {
+    "enabled": false,
+    "PreInvocation": [ { "type": "command", "command": "./scripts/hooks/reminder.sh" } ]
+  }
+}
+```
+  - **Tool events** (`PreToolUse`, `PostToolUse`) take a list of `{ "matcher": <regex>, "hooks": [handlers] }`. The matcher is a **regex on the tool name**: `""` or `"*"` means all tools, `"run_command|view_file"` matches either, and `"browser_.*"` matches a prefix.
+  - **Lifecycle events** (`PreInvocation`, `PostInvocation`, `Stop`) take a **plain list of handlers**, and any matcher is ignored.
+  - A **handler** is `type` (optional, only `"command"`), `command` (required), and `timeout` (**seconds**, default **30**).
+  - Matchable tool names include `view_file`, `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `list_dir`, `find_by_name`, `grep_search`, `search_web`, `read_url_content`, `run_command`, `manage_task`, `schedule`, `list_permissions`, `ask_permission`, `invoke_subagent`, `define_subagent`, `send_message`, `manage_subagents`, `ask_question`, `generate_image`. The docs don't give the matcher name format for MCP tools **(unverified)**.
+- **Events and contract.** Input arrives as JSON on **stdin** and output goes as JSON to **stdout**, all in **camelCase**. Every input carries `conversationId`, `workspacePaths`, `transcriptPath`, `artifactDirectoryPath` and `modelName`.
+
+| Event | Fires | Extra input | Output (stdout) | What it can do |
+|---|---|---|---|---|
+| `PreToolUse` | Before a tool executes | `toolCall{name,args}`, `stepIdx` | **`decision` (required)**: `allow` \| `deny` \| `ask` \| `force_ask` \| `deny_unless_prior_grant`. Optional: `reason`, `permissionOverrides` (e.g. `["command(npm test)"]`) | **Block** (hard deny), auto-approve, force a prompt even if "Always Allow" was cached, or only allow what a user granted before |
+| `PostToolUse` | After a tool completes | `toolCall`, `stepIdx`, `error` (set if the tool failed) | `{}` | **Observe only**: lint/format, audit logs, notify. It can't undo or hide the result |
+| `PreInvocation` | Before each model call | `invocationNum`, `initialNumSteps` | `injectSteps`: `[{userMessage}\|{ephemeralMessage}\|{toolCall}]` | Inject reminders or context, or force a tool call before the model thinks |
+| `PostInvocation` | After each model call | Same as `PreInvocation` | `injectSteps`, `terminationBehavior`: `force_continue` \| `terminate` \| `""` | Keep the loop going, or kill it |
+| `Stop` | When the execution loop terminates | `executionNum`, `terminationReason` (`model_stop`, `max_steps_exceeded`, `error`), `error`, `fullyIdle` | **`decision` (required)**: `"continue"` re-enters the loop, and `reason` is injected as a system message. Any other value allows the stop | **Definition-of-done gate**: don't let the agent finish while tests fail |
+
+- **Exit codes.** Unlike Gemini CLI and Claude Code (where **exit code 2 = block**), the Antigravity docs define blocking **only through the JSON `decision`**. Behavior on a non-zero exit, a timeout or malformed JSON is **not documented (unverified)**, so design hooks to **fail closed**: always print a valid decision, and treat a script error as `deny`.
+- **What hooks can and cannot enforce.** They **can** deterministically gate any tool call (commands, file writes, subagent spawns, web fetches), run formatters and linters, write audit logs (they get `transcriptPath` for export), inject steps, and stop the agent from declaring "done". They **cannot** rewrite tool arguments (there is no documented equivalent of Gemini CLI's `tool_input` override), redact a tool's output, or filter the model's tool list. Hooks also run with **your user privileges**, so a committed workspace `hooks.json` is code execution: review it like CI config.
+- **Example: deny writes to secrets** (`scripts/hooks/deny-secrets.sh`):
+```bash
+#!/usr/bin/env bash
+# PreToolUse on file-write tools: hard-deny secrets, allow everything else.
+set -euo pipefail
+payload="$(cat)"
+target="$(jq -r '.toolCall.args.TargetFile // empty' <<<"$payload")"
+if [[ "$target" =~ (^|/)(\.env[^/]*|secrets/|.*\.pem$|.*id_rsa) ]]; then
+  echo "blocked write to $target" >> .agents/hook-audit.log   # audit trail
+  printf '{"decision":"deny","reason":"Writes to secret files are blocked by policy (%s)."}\n' "$target"
+else
+  echo '{"decision":"allow"}'
+fi
+```
+  **Design note:** the same "never write secrets" requirement can also be met without code by `deny: ["write_file(.env)", …]` in permissions. Use the hook when you need **logic, logging or dynamic decisions**. Use a permission rule when a static pattern is enough (principle 2: the simpler control wins).
+- **Example: tests must pass before "done"** (`scripts/hooks/tests-gate.sh`, on `Stop`):
+```bash
+#!/usr/bin/env bash
+payload="$(cat)"
+# Only gate a normal, fully idle stop; cap retries to avoid an infinite loop.
+[[ "$(jq -r '.fullyIdle' <<<"$payload")" == "true" ]] || { echo '{"decision":"stop"}'; exit 0; }
+[[ "$(jq -r '.executionNum' <<<"$payload")" -lt 4 ]]  || { echo '{"decision":"stop"}'; exit 0; }
+if out="$(npm test --silent 2>&1)"; then
+  echo '{"decision":"stop"}'
+else
+  jq -n --arg r "Tests are failing — fix them before finishing: ${out: -1500}" '{decision:"continue", reason:$r}'
+fi
+```
+  **Precision vs 2.1.c:** `PostInvocation` + `force_continue` also keeps the loop alive, but it fires after **every** model call. The `Stop` hook with `decision: "continue"` is the event built for the "don't finish until green" gate.
+
+**5. Subagents, plugins, workflows, MCP, permissions (the essentials, with paths)**
+
+- **Subagents** live in `.agents/agents/<name>.md` or `<name>/agent.md`, in `~/.gemini/config/agents/`, or in `<plugin>/agents/`. They can also be created at runtime by `define_subagent`.
+  - **Frontmatter:** `name` and `description` are required. Optional fields are `tools` (explicit allowlist; a misspelled name can **hang** the subagent), `mainAgent`/`subagent` (default `true`), `model` (`inherit`\|`flash`\|`pro`), `commandExecutionPolicy` (`off`\|`auto`\|`eager`\|`sandbox`, default `sandbox`), `mcpServers`, and `skills`/`plugins`. The body is the system prompt.
+  - **Behavior:** a subagent gets a clean context (it does not inherit history) and can use workspace `inherit`\|`branch` (git worktree)\|`share`. Nesting is capped at **10 levels**. It inherits the parent's command prefixes, file scopes and sandbox, and permission prompts **bubble up** to the parent.
+  - **Managing them:** `/agents` (CLI) with **Alt+J** to jump to the next subagent awaiting approval. The built-ins are `research`, `browser` (`/browser` only) and `self`.
+- **Plugins:** see the layout above. The CLI commands are `agy plugin list | install <path|url> | enable | disable | uninstall <name>` and `agy plugin import gemini`, which converts Gemini CLI extensions and turns their legacy `commands` into skills.
+- **Workflows (deprecated):**
+  - **Paths:** `.agents/workflows/<name>.md` and `~/.gemini/config/workflows/<name>.md`. A workflow is a single file of up to **12,000 characters**, loaded **in full**, and invoked as `/<workflow-name>`. Workflows can call other workflows.
+  - **Retirement:** they are **retired on 2026-11-01**, after which they are no longer indexed or executable.
+  - **Migration:** `/migrate-workflows` scans both paths, scaffolds `.agents/skills/<name>/SKILL.md`, and renames each original to `.md.bak`. On a name clash, the **skill wins**.
+- **MCP:** use `mcp_config.json` (global `~/.gemini/config/`, workspace `.agents/`, or a plugin). The file holds `mcpServers`, and each server has `command` or `serverUrl` (never `url`/`httpUrl`), with optional `args`, `env`, `cwd`, `headers`, `authProviderType: "google_credentials"`, `oauth`, `disabled` and `disabledTools`. Details are in 2.1.a.
+- **Permissions:** rules take the form `action(target)` with the actions `read_file`, `write_file`, `read_url`, `execute_url`, `command`, `mcp` (plus `unsandboxed` on Windows and in the CLI). They are evaluated **Deny > Ask > Allow**, and a hook's `permissionOverrides` can supply extra grants per call. Details are in 2.1.a and 2.1.b.
+
+**6. When to use which**
+
+| Requirement shape | Use | Exact artifact | Why not the others |
+|---|---|---|---|
+| Invariant that should shape *every* answer ("use zod", "no `internal/` imports") | **Rule**, `always_on` or `AGENTS.md` | `AGENTS.md` / `.agents/rules/x.md` | A skill might not trigger. A hook can't teach style |
+| Long guide that's only sometimes relevant | **Rule**, `model_decision` | `trigger: model_decision` + good `description` | `always_on` burns the 20k budget every turn |
+| Conventions for one file type | **Rule**, `glob` | `trigger: glob`, `globs: "*.tf"` | Loads only when those files are touched |
+| Checklist used only on request | **Rule**, `manual` (`@`-mention), or a skill invoked by `/name` | `trigger: manual` | Pick the skill if it needs scripts or steps |
+| Repeatable multi-step procedure, especially with scripts or templates | **Skill** | `.agents/skills/<n>/SKILL.md` + `scripts/` | A rule bloats context and has no bundled assets. A workflow is deprecated |
+| "Must never happen", "always", "audit every…" | **Hook** (`PreToolUse` deny) or **permission deny** | `.agents/hooks.json` / `permissions.deny` | Rules and skills are advisory prompt text |
+| "Don't finish until tests pass" | **Hook** (`Stop` → `continue`) | `Stop` handler | A rule saying "run tests" is only a request |
+| Auto-format or lint after edits | **Hook** (`PostToolUse`) | matcher `write_to_file\|replace_file_content\|multi_replace_file_content` | — |
+| Separate context, least-privilege tools, parallel work | **Subagent** | `.agents/agents/<n>.md` (`tools`, `commandExecutionPolicy`) | A skill runs inside the main context with the main agent's tools |
+| Live system data or external actions | **MCP server** | `mcp_config.json` + `mcp(server/tool)` perms | A skill carries knowledge, not live access |
+| Ship rules + skills + hooks + MCP + agents to many devs as one unit | **Plugin** | `plugin.json` + component folders | Copying files per repo drifts |
+| Share only rules across repos | `rules.json` `inherits` / `entries` | `.agents/rules.json` | A plugin is heavier if you only need rules |
+
+**Keyword → primitive signals**
+
+| Phrase in the question | Answer |
+|---|---|
+| "coding standard", "convention", "always follow", "project context" | Rule / `AGENTS.md` |
+| "only for `*.sql` files", "when editing Terraform" | Rule with `trigger: glob` + `globs` |
+| "only when relevant", "reduce tokens", "detailed guide" | Rule `model_decision`, or a skill (progressive disclosure) |
+| "only when explicitly requested", "audit rubric" | Rule `trigger: manual` (`@`-mention) |
+| "step-by-step procedure", "bundle a script", "reusable across tools", "slash command" | Skill |
+| "guarantee", "block", "prevent", "enforce", "regardless of the prompt", "log every" | Hook (`PreToolUse` → `deny`) and/or a `deny` permission |
+| "before the agent declares done", "keep working until" | `Stop` hook (`decision: "continue"`) |
+| "inject a reminder every turn" | `PreInvocation` hook (`injectSteps` → `ephemeralMessage`) |
+| "read-only reviewer", "restricted tools", "own context", "parallel" | Subagent |
+| "one install", "distribute to the org", "bundle" | Plugin |
+| "legacy workflow", "12,000 characters", "Nov 2026" | Migrate to skills (`/migrate-workflows`) |
+
+**Common distractors**
+- `trigger: alwaysOn` / `modelDecision`. camelCase is **silently dropped**, so use `always_on` / `model_decision`.
+- An **unquoted** `globs: *.ts`. YAML reads `*` as an alias, so write `globs: "*.ts"`.
+- Rules in nested folders under `.agents/rules/` without `rules.json`.
+- Putting a hook in `.agents/settings.json` (not a documented location). Hooks live in `hooks.json`. Only the CLI's `~/.gemini/antigravity-cli/settings.json` also accepts them.
+- Blocking in Antigravity with **exit code 2**, or `decision: "block"`. Those are Gemini CLI and Claude Code conventions. Antigravity uses JSON `decision: "deny"`.
+- Expecting `PostToolUse` to block. It returns `{}`, and the tool has already run.
+- A hook `timeout` in **milliseconds**. Antigravity uses **seconds** (default 30). Gemini CLI uses ms (default 60000).
+- Putting CLI global skills in `~/.gemini/config/skills/`. The CLI docs list `~/.gemini/antigravity-cli/skills/`. The `.gemini/skills/` folder from Gemini CLI must be **moved** to `.agents/skills/`.
+- Skill Registry as the way to give **developers' IDE agents** a skill. It serves ADK/runtime agents. Use a plugin or the repo instead.
+- `url` / `httpUrl` in `mcp_config.json`. Use `serverUrl`.
+
+**Antigravity vs Gemini CLI vs Claude Code (paths and semantics)**
+
+| Concern | Antigravity | Gemini CLI | Claude Code (Anthropic docs) |
+|---|---|---|---|
+| Always-on project context | `AGENTS.md` / `GEMINI.md` (any dir, walked up) | `GEMINI.md` (hierarchical) | `CLAUDE.md` (+ `CLAUDE.local.md`) |
+| Global context | `~/.gemini/{AGENTS,GEMINI}.md`, `~/.gemini/config/rules/` | `~/.gemini/GEMINI.md` | `~/.claude/CLAUDE.md` |
+| Scoped / modular rules | `.agents/rules/*.md`, `trigger` + `globs` | Subdirectory `GEMINI.md` files | `.claude/rules/*.md` with `paths:` frontmatter |
+| Skills | `.agents/skills/` · `~/.gemini/config/skills/` · CLI `~/.gemini/antigravity-cli/skills/` | `.gemini/skills/` · `~/.gemini/skills/` | `.claude/skills/` · `~/.claude/skills/` |
+| Custom slash commands | Skills (`/name`); workflows deprecated | `.gemini/commands/*.toml` | Skills (legacy `.claude/commands/*.md`) |
+| Hooks config | `.agents/hooks.json` · `~/.gemini/config/hooks.json` | `hooks` in `.gemini/settings.json` / `~/.gemini/settings.json` | `hooks` in `.claude/settings.json` / `~/.claude/settings.json` / managed settings |
+| Hook events | `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop` | `BeforeTool`, `AfterTool`, `BeforeAgent`, `AfterAgent`, `BeforeModel`, `AfterModel`, `BeforeToolSelection`, `SessionStart`, `SessionEnd`, `PreCompress`, `Notification` | `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`, `Notification`, `PreCompact` (among others) |
+| Block semantics | JSON `decision: "deny"` | Exit 2 or `decision: "deny"`/`"block"` | Exit 2 or JSON permission decision `deny` |
+| Hook timeout unit | Seconds (default 30) | Milliseconds (default 60000) | Seconds |
+| Subagents | `.agents/agents/<n>.md` | `.gemini/agents/*.md` **(unverified)** | `.claude/agents/*.md` · `~/.claude/agents/` |
+| MCP | `.agents/mcp_config.json` · `~/.gemini/config/mcp_config.json` (`serverUrl`) | `mcpServers` in `settings.json` (`url`/`httpUrl`) | `.mcp.json` (project) · `claude mcp add --scope user` |
+| Packaging | Plugin (`plugin.json`) | Extension (`gemini-extension.json`) | Plugin (`.claude-plugin/plugin.json`) |
+| Permissions | `permissions.{allow,deny,ask}`, `action(target)` | Policy/settings **(not covered here)** | `permissions.{allow,ask,deny}`, e.g. `Bash(npm test)` |
+
+#### 2.2.c Augmenting Antigravity with Agents CLI (build, scale, govern, optimize deployed agents)
 
 **What Agents CLI is**
 - It is the **"Agents CLI in Agent Platform"** (`google-agents-cli`, GitHub `google/agents-cli`). It is **not itself a coding agent**. It is a machine-readable CLI plus **skills** that give any coding agent (Antigravity, Claude Code, Codex, Gemini CLI, Cursor) expert ADK, eval and deploy knowledge.
@@ -1026,6 +1366,62 @@ C. Move developers to GKE Agent Sandbox
 D. Run agents with `nohup` on the workstation
 **Answer: B.** Suspend preserves RAM and agent context while stopping compute billing, and the hooks keep the VM alive only during active work. A burns compute while idle. C is the wrong tool for interactive dev environments. D doesn't prevent the idle shutdown.
 
+**Q11.** A team is moving from Gemini CLI to Antigravity CLI. Their repo has ten custom skills in `.gemini/skills/`, and their `GEMINI.md` files are at the repo root and in several service folders. After switching, the rules still apply but none of the skills appear as slash commands. What should they do?
+A. Run `agy plugin import gemini` to convert the skills
+B. Move `.gemini/skills/` to `.agents/skills/` in the repo. The `GEMINI.md` files need no change
+C. Copy the skills into `~/.gemini/config/rules/` so they load globally
+D. Rename every `SKILL.md` to `AGENTS.md`
+**Answer: B.** The migration guide says workspace skills must be moved by hand from `.gemini/skills/` to `.agents/skills/`, while `GEMINI.md`/`AGENTS.md` context files work unchanged. A converts *extensions* into plugins, not a repo's skill folder. C turns procedures into rules (and rule files need `trigger` frontmatter). D turns on-demand skills into always-on context.
+
+**Q12.** A platform team wants protobuf conventions (never reuse a field number, always mark deleted fields `reserved`) applied whenever the agent edits `.proto` or generated `.pb.go` files. The conventions must not consume context in other tasks. Which rule file is correct?
+A. `.agents/rules/proto.md` with `trigger: glob` and `globs: "*.proto, **/*.pb.go"`
+B. `.agents/rules/proto.md` with `trigger: always_on`
+C. `.agents/rules/proto/conventions.md` with `trigger: glob` and `globs: *.proto`
+D. `AGENTS.md` at the repo root with a `globs:` frontmatter block
+**Answer: A.** A `glob` rule activates only when the agent touches matching files, and the quoted, comma-separated `globs` string is the documented format. B costs tokens on every turn. C is nested (ignored without `rules.json`) and has an unquoted `*` that YAML parses as an alias. D is wrong because `AGENTS.md` takes no frontmatter and is always on.
+
+**Q13.** Internal audit has a 15-page security review rubric. Auditors want the agent to use it only when they explicitly ask for an audit, and it must never load automatically, even if a task looks security-related. What should you configure?
+A. A rule with `trigger: model_decision` and a description mentioning security audits
+B. A rule with `trigger: manual`, which auditors pull in by `@`-mentioning it in chat
+C. A `PreInvocation` hook that injects the rubric as an `ephemeralMessage`
+D. Add the rubric to the global `~/.gemini/GEMINI.md`
+**Answer: B.** `manual` rules are never loaded automatically, only on an explicit `@` mention, and the docs cite audit rubrics as the use case. A lets the model decide to load it. C injects it every turn. D makes it always on across every project and eats into the 20k-token budget.
+
+**Q14.** Agents in a repo often stop and report "done" while unit tests are failing. There is already an `AGENTS.md` rule saying "always run tests before finishing". The team wants a deterministic gate that sends the agent back to work with the failure output, with minimal extra machinery. What should you add?
+A. A `PostToolUse` hook on `write_to_file` that returns `{"decision":"deny"}` when tests fail
+B. A `Stop` hook in `.agents/hooks.json` that runs the tests and, on failure, returns `{"decision":"continue","reason":"<failures>"}`, with a retry cap
+C. Change the rule to `trigger: always_on` with stronger wording
+D. A `PreToolUse` hook on `run_command` that returns `force_ask`
+**Answer: B.** A `Stop` hook with `decision: "continue"` re-enters the loop and injects the reason as a system message, which makes it a deterministic definition-of-done gate. A fails because `PostToolUse` only returns `{}` and cannot block. C is still advisory. D only adds prompts and never checks the test result.
+
+**Q15.** You are porting a Gemini CLI `BeforeTool` hook (defined in `.gemini/settings.json`, `"timeout": 5000`, blocks by exiting with code 2) to Antigravity. Which set of changes is correct?
+A. Keep the file and event name. Antigravity reads Gemini CLI `settings.json` hooks
+B. Move it to `.agents/hooks.json` as `PreToolUse` under a named hook, set `"timeout": 5` (seconds), and block by printing `{"decision":"deny","reason":"…"}` to stdout
+C. Move it to `.agents/rules/hooks.md` with `trigger: always_on`
+D. Move it to `.agents/hooks.json` as `PreInvocation` with a `matcher` and keep `"timeout": 5000`
+**Answer: B.** Antigravity uses `hooks.json`, the `PreToolUse` event with a regex tool matcher, a timeout in seconds (default 30), and a JSON `decision` for blocking. A is wrong because Gemini CLI hook config is not a documented Antigravity location. C turns enforcement into advisory text. D ignores the matcher on lifecycle events, and 5000 would mean 5000 seconds.
+
+**Q16.** A central platform team must roll out the same four skills, two `glob` rules, a secrets-blocking hook, and a read-only BigQuery MCP server to 300 developers using Antigravity 2.0 and the CLI across 150 repos. Updates must ship as one versioned unit. What is the best approach?
+A. Publish the skills to Skill Registry and ask developers to copy the rest by hand
+B. Package everything as a plugin (`plugin.json` plus `skills/`, `rules/`, `hooks.json`, `mcp_config.json`) and install it globally (`~/.gemini/config/plugins/`, or `agy plugin install <git-url>` for the CLI)
+C. Add a `.agents/rules.json` with `inherits` pointing at a shared repo
+D. Put all the content into one large `AGENTS.md` in every repo
+**Answer: B.** Plugins are the distribution unit for skills, rules, hooks, MCP servers and agents. A misuses Skill Registry, which serves ADK and runtime agents rather than IDE customization, and it leaves most of the bundle manual. C shares only rules. D can't carry hooks or MCP config and bloats the always-on budget.
+
+**Q17.** You need a security reviewer that can only read code and search, runs in its own context so it doesn't pollute the main conversation, uses the stronger model tier, and runs any shell commands only in the sandbox. The main agent should delegate to it automatically. What should you create?
+A. A skill `.agents/skills/security-review/SKILL.md` describing the review steps
+B. A subagent `.agents/agents/security-reviewer.md` with `description`, `tools: [view_file, grep_search]`, `model: pro`, `commandExecutionPolicy: sandbox`, and `subagent: true`
+C. A rule with `trigger: model_decision` about security reviews
+D. A plugin containing only `plugin.json`
+**Answer: B.** Only a subagent provides context isolation plus a tool allowlist, a model tier and an execution policy, and the planner delegates to it based on `description`. A and C run inside the main agent's context with its full toolset. D carries no behavior. Spell tool names exactly, because a misspelled tool can hang the subagent.
+
+**Q18.** A team has 25 legacy workflows in `.agents/workflows/` and `~/.gemini/config/workflows/`, several of them near the 12,000-character limit, and they want them to keep working after the retirement date. Some workflow names match skills that already exist. What should they do?
+A. Nothing. Workflows remain supported indefinitely
+B. Run `/migrate-workflows` in Antigravity 2.0 to scaffold `.agents/skills/<name>/SKILL.md` for each one (originals are renamed `.bak`), then move embedded scripts into `scripts/`. Where names collide, the existing skill already takes precedence
+C. Convert each workflow to an `always_on` rule
+D. Split each workflow into two files under 6,000 characters
+**Answer: B.** Workflows retire on 2026-11-01, and `/migrate-workflows` is the documented path. Skills win name collisions, and moving scripts into the skill bundle keeps `SKILL.md` lean. C loads procedures on every turn. D keeps a deprecated format.
+
 ---
 
 ### Key doc links
@@ -1066,6 +1462,13 @@ D. Run agents with `nohup` on the workstation
 - Agent Registry skills: https://docs.cloud.google.com/agent-registry/register-skills
 - Gemini CLI extensions / skills: https://geminicli.com/docs/extensions/reference/, https://geminicli.com/docs/cli/skills/
 - CodeMender: https://cloud.google.com/security/codemender
+- Antigravity IDE workflows (legacy): https://antigravity.google/docs/ide/workflows
+- Antigravity CLI `/agents` command (custom agent paths): https://antigravity.google/docs/cli/commands/agents
+- Antigravity CLI settings / reference (settings.json keys): https://antigravity.google/docs/settings, https://antigravity.google/docs/cli/reference
+- Build with Google plugins: https://antigravity.google/docs/build-with-google
+- Agent Skills open specification: https://agentskills.io/specification
+- Gemini CLI hooks / hooks reference: https://geminicli.com/docs/hooks/, https://geminicli.com/docs/hooks/reference/
+- Claude Code hooks / memory (CLAUDE.md, rules) / skills / subagents / plugins: https://code.claude.com/docs/en/hooks, https://code.claude.com/docs/en/memory, https://code.claude.com/docs/en/skills, https://code.claude.com/docs/en/sub-agents, https://code.claude.com/docs/en/plugins
 - Data Agent Kit: https://cloud.google.com/products/data-agent-kit
 
 
@@ -1531,7 +1934,7 @@ cfg = rag.RagRetrievalConfig(
 
 **Agent Registry** is the governance catalog of **Agents, MCP servers, Endpoints and Skills** (resources: `Agent`, `McpServer`, `Endpoint`, `Skill`, `SkillRevision`, `Publisher`).
 - **Read vs write split:** you discover through the read-only `Agent`/`McpServer`/`Endpoint` resources, and you register or modify through the writable **`Service`** resource (`gcloud agent-registry services delete ...`).
-- **Automatic registration** covers supported resources such as Agent Runtime agents and Google Cloud remote MCP servers. It is **single-project scope**. Use **manual registration** for external or custom components and for cross-project central catalogs. To remove an auto-registered MCP server, delete the server or disable its API.
+- **Automatic registration** covers Agent Runtime agents, built-in Workspace and Gemini Enterprise agents, Google Cloud remote MCP servers (registered when you enable the product API), GKE Deployments labelled `registry.gke.io/functional-type`, and Cloud Run workloads deployed with `--functional-type=agent|mcp-server`. It is **single-project scope**. Use **manual registration** for external or custom components and for cross-project central catalogs. To remove an auto-registered MCP server, delete the server or disable its API.
 - **Identifiers:** URNs (`urn:agent:...`, `urn:mcp:googleapis.com:projects:N:locations:global:SERVER`, `urn:skill:...`) are for **inventory and lookup only**. Policies use the **agent principal**, not the URN.
 - **Bindings** connect a source agent to a target agent, MCP server or endpoint, or to an **auth provider** (delegated access).
 - The registry supports A2A specification versions **0.3 and 1.0**.
@@ -1570,6 +1973,388 @@ root_agent = LlmAgent(name="orchestrator", model="gemini-flash-latest",
 - "Curated, least-privilege DB queries as tools" → **MCP Toolbox** (not raw `execute_sql`).
 - "No infra to host, just let agent query BigQuery" → **BigQuery remote MCP server** + `mcp.toolUser`.
 - "Salesforce/SAP" → **Application Integration connectors**.
+
+#### 3.2.4 Deep dive — Registering MCP servers in Agent Registry
+
+> 📊 **Infographic:** Agent Registry — registering MCP servers
+>
+> [![Agent Registry — registering MCP servers](infographics/17-agent-registry-mcp.png)](infographics/17-agent-registry-mcp.png)
+
+Registering an MCP server does three jobs. It makes the server and its tools **discoverable** (console, gcloud, the registry's own MCP server, ADK, Agent Studio). It gives **bindings** a target to point at (resource links and auth providers). And it makes the server a **governable destination**: an egress Agent Gateway denies anything that isn't registered, and IAM egress policies can only be bound to registered resources. If an MCP server isn't in the registry, the platform can't govern it.
+
+**A. Resource model**
+
+| Resource | Access | What it is | Resource name |
+|---|---|---|---|
+| `Service` | **Writable** | Manual registration of an agent, MCP server or endpoint. The spec you set decides which read view it becomes. The output-only `registryResource` field holds the projected name | `projects/P/locations/L/services/ID` |
+| `McpServer` | Read-only | Discovery view of an MCP server and its tools | `projects/P/locations/L/mcpServers/ID` |
+| `Agent` | Read-only | Discovery view of an agent. A2A skills are indexed from its Agent Card | `…/agents/ID` |
+| `Endpoint` | Read-only | Discovery view of a target URL, usually a REST API | `…/endpoints/ID` |
+| `Skill`, `SkillRevision`, `Publisher` (Preview) | Managed directly, **not** through `Service` | Standalone `SKILL.md` packages with immutable revisions and a default revision. Your skills sit under the `private` publisher | `…/skills/private-ID` |
+| `Binding` | Writable | Source agent → target (agent, MCP server, endpoint), or source agent → **auth provider** | `…/bindings/ID` |
+
+- **Write through `Service`, read through the typed views.** You never create or patch an `McpServer` directly. To change a manually registered server, you update its `Service`.
+- **The spec flag picks the collection.** The three flag pairs are mutually exclusive. If you use the wrong pair, the entry lands in the wrong collection and type-specific policies may not apply to it.
+
+  | gcloud flags | REST field | Becomes | Valid spec types |
+  |---|---|---|---|
+  | `--mcp-server-spec-type` / `--mcp-server-spec-content` | `mcpServerSpec` | `McpServer` | `tool-spec` (REST enum also has `NO_SPEC`) |
+  | `--agent-spec-type` / `--agent-spec-content` | `agentSpec` | `Agent` | `a2a-agent-card`, `no-spec` |
+  | `--endpoint-spec-type` | `endpointSpec` | `Endpoint` | `no-spec` |
+- **Interfaces** hold the connection details: `url` plus `protocolBinding`, which is `jsonrpc`, `http-json` or `grpc` (in Terraform, `JSONRPC`, `HTTP_JSON` or `GRPC`). MCP servers normally use `jsonrpc`. With an `A2A_AGENT_CARD` spec, `interfaces` must be empty, because the card carries its own URLs.
+- **REST:** `POST https://agentregistry.googleapis.com/v1/projects/P/locations/L/services?serviceId=ID`. `serviceId` is 4–63 characters of `[a-z0-9-]`. The call returns a long-running **Operation**. The optional `requestId` (a UUID) makes retries idempotent for at least 60 minutes. Create needs `agentregistry.services.create` and the `cloud-platform` or `agentregistry.read-write` scope.
+
+**Three identifiers you must not confuse**
+
+| Identifier | Example | Used for |
+|---|---|---|
+| **URN** (logical, immutable) | Google remote MCP: `urn:mcp:googleapis.com:projects:PROJECT_NUMBER:locations:global:SERVER_NAME`<br>Manual MCP: `urn:mcp:projects-PROJECT_NUMBER:projects:PROJECT_NUMBER:locations:REGION:agentregistry:services:SERVER_ID` | Inventory, lookup, `--filter="mcpServerId='urn:mcp:…'"`, binding source/target |
+| **Resource URI** (runtime reference) | The Cloud Run service, GKE Deployment or Agent Runtime instance that actually runs it (`agentregistry.googleapis.com/system/RuntimeReference`) | Topology graph queries |
+| **Agent principal** (IAM) | `principal://agents.global.org-ORG_ID.system.id.goog/resources/…` | **All** access policies. URNs never go in IAM |
+
+**Locations**
+- **Global**, multi-regions **`us`** and **`eu`**, and about 40 regions. The registry is **project-scoped**: enable the API per project. If you move to another project, nothing migrates; you recreate every entry.
+- **`us`/`eu` restriction:** in the multi-regions you **can't** manually register agents, MCP servers or endpoints, and you can't create bindings. Use a region or `global`. Standalone skills *are* supported in `global` and the multi-regions.
+- **Google-managed remote MCP servers live in `global`**, so IAM bindings on them must use `--region=global`. A regional flag such as `--region=us-central1` returns `NOT_FOUND`.
+- **Cross-project governance:** the registry, the Agent Gateway and the agent endpoints must be in the **same region or `global`**. Gemini Enterprise alignment:
+
+  | Gemini Enterprise app | Agent Gateway | Agent Registry |
+  |---|---|---|
+  | `global` | `us-central1` | `us-central1`, `us` or `global` |
+  | `us` | `us-central1` | `us-central1` or `us` |
+  | `eu` | `europe-west1` | `europe-west1` or `eu` |
+
+**B. Setup**
+
+```bash
+gcloud services enable agentregistry.googleapis.com --project=PROJECT_ID   # also turns on the registry's own MCP server
+gcloud services enable iap.googleapis.com --project=PROJECT_ID             # only if Agent Gateway will enforce policy
+# Cloud Run auto-registration also needs: run, iam, agentregistry and App Hub APIs
+```
+
+| Role | Grants | Typical holder |
+|---|---|---|
+| `roles/agentregistry.viewer` | get, list and search agents, MCP servers, endpoints and skills; view bindings | Developers, **and every agent identity that resolves tools at runtime** |
+| `roles/agentregistry.editor` | Viewer plus `services.create/update/delete` (manual registration, tool-spec updates) and skills. It **can't** create bindings | Platform engineers who onboard servers |
+| `roles/agentregistry.admin` | `agentregistry.*`, including **`bindings.create/update/delete`** | Registry administrators |
+| `roles/agentregistry.user` | Skills and skill revisions CRUD; read-only on everything else | Skill authors |
+| `roles/serviceusage.serviceUsageAdmin`, `roles/resourcemanager.projectIamAdmin` | Enable the API and grant the roles above | Project setup |
+| `roles/mcp.toolUser` (`mcp.tools.call`) | Call tools on Google MCP servers, including `agentregistry.googleapis.com/mcp` | Any caller of Google remote MCP servers |
+| `roles/iap.egressor` | Egress through Agent Gateway to a registered target (granted to the **agent principal** on the target) | Agent identities |
+| `roles/iap.admin` | Manage IAP egress policies on registry resources | Security admins |
+
+> ⚠️ **Don't grant `agentregistry.editor` or `.admin` to agents.** Those roles can edit tool annotations such as `readOnlyHint` and `destructiveHint`, and policies trust those annotations. They can also enroll a malicious third-party agent. Agents get **viewer** only.
+
+**C. Automatic registration (same project only)**
+
+| Source | How to opt in | What lands in the registry | How to remove it |
+|---|---|---|---|
+| **Google and Google Cloud remote MCP servers** (BigQuery, Compute Engine, Cloud SQL, Agent Search …) | **Enable the product's API** in the project (for example `gcloud services enable compute.googleapis.com`) | The server **and its tools**, immediately, in the **`global`** location. No tool spec to upload | **Disable the product API** (or delete the underlying server) |
+| **Apigee API hub** | Turn on sync of MCP-style APIs to Agent Registry | Imported MCP APIs. Keep the sync enabled or the data goes stale | Stop the sync |
+| **GKE** | Deployment **label** `registry.gke.io/functional-type: "MCP_SERVER"`, plus the **annotations** `modelcontextprotocol.info/urls` (endpoint URLs) and `modelcontextprotocol.info/capabilities` (card: endpoint, protocol) | The GKE controller **introspects** the server, gets its tool spec and registers the tools. The Deployment name becomes the display name | Delete the Deployment (the docs say to delete the underlying server; whether removing the label deregisters it is unverified) |
+| **Cloud Run** (Preview) | `gcloud beta run deploy SVC --image=IMG --functional-type=mcp-server [--identity-type=agent-identity\|service-account]` | Server name and type `MCP_SERVER` under `/mcpServers`. The identity defaults to a **service account** if you don't set one | Delete the service (whether tools are introspected for Cloud Run servers is unverified) |
+
+- **GKE backward compatibility:** the old annotation `apphub.cloud.google.com/functional-type` still works, but the label is recommended.
+- **Only Cloud Run *services* can be MCP servers.** Jobs support only `--functional-type=agent`.
+- **Agents, for contrast:**
+  - Agent Runtime agents are registered with no flag, and updates and deletes sync automatically.
+  - On Cloud Run, `--functional-type=agent` **requires** `--identity-type=agent-identity`; any other identity type is an error.
+  - GKE needs the label `registry.gke.io/functional-type: "AGENT"` plus the annotation `a2a-protocol.org/agent-card`.
+  - Built-in Workspace and Gemini Enterprise agents appear with no setup.
+- **Automatic registration never crosses projects.** A central governance project must register workload-project components manually.
+
+**D. Manual registration of an MCP server, step by step**
+
+Use manual registration for third-party or SaaS MCP servers, on-premises or other-cloud servers, unsupported runtimes, and servers in another project that a central registry and gateway must govern.
+
+1. **Prerequisites.** The API is enabled, you hold `roles/agentregistry.editor`, and the location is a **region or `global`** (not `us`/`eu`).
+2. **Write `toolspec.json`.** Its payload is exactly the shape of an MCP `tools/list` response. The file limit is **10 KB** and a service can hold at most **100 tools**. **Manual registration does not introspect the server.** The registry records the endpoint and only the tools you declare.
+   ```json
+   {"tools": [
+     {"name": "get_customer_info", "description": "Retrieves customer details.",
+      "inputSchema": {"type": "object", "properties": {"email": {"type": "string"}}},
+      "annotations": {"title": "Get Customer Info", "readOnlyHint": true, "idempotentHint": true}},
+     {"name": "create_support_ticket", "description": "Creates a support ticket.",
+      "annotations": {"destructiveHint": true, "idempotentHint": false, "openWorldHint": true}}
+   ]}
+   ```
+   The annotation defaults follow the MCP spec: `readOnlyHint=false`, **`destructiveHint=true`**, `idempotentHint=false`, **`openWorldHint=true`**. If you leave a tool unannotated, policies treat it as a potentially destructive, open-world tool.
+3. **Register it.**
+   - **Console:** Agent Registry → **MCP servers** tab → **Add MCP server** → enter the display name, description and region → under **Tool specification**, enter the endpoint URL and paste the tool spec, or click **Import tools** (this only works for **publicly reachable** URLs) → **Next** → select the tools to include → **Save**.
+   - **gcloud:**
+     ```bash
+     gcloud agent-registry services create crm-mcp \
+       --project=PROJECT_ID --location=us-central1 \
+       --display-name="CRM MCP" \
+       --mcp-server-spec-type=tool-spec \
+       --mcp-server-spec-content=@toolspec.json \
+       --interfaces=url=https://crm.example.com/mcp,protocolBinding=jsonrpc
+     ```
+   - **Terraform:**
+     ```hcl
+     resource "google_agent_registry_service" "crm_mcp" {
+       location     = "us-central1"
+       service_id   = "crm-mcp"
+       display_name = "CRM MCP"
+       interfaces {
+         url              = "https://crm.example.com/mcp"
+         protocol_binding = "JSONRPC"
+       }
+       mcp_server_spec {
+         type    = "TOOL_SPEC"
+         content = file("toolspec.json")
+       }
+     }
+     # registry_resource output = projects/…/locations/…/mcpServers/…
+     ```
+   - **REST body:** `{"displayName": "...", "interfaces": [{"url": "...", "protocolBinding": "JSONRPC"}], "mcpServerSpec": {"type": "TOOL_SPEC", "content": {"tools": [...]}}}`. This body is assembled from the REST reference; the enum spelling of `protocolBinding` in REST is unverified.
+   - **From an agent or IDE:** the `create_service` tool on `https://agentregistry.googleapis.com/mcp`.
+4. **Verify.**
+   ```bash
+   gcloud agent-registry mcp-servers list --project=PROJECT_ID --location=us-central1 \
+     --filter="displayName='CRM MCP'"          # or mcpServerId='urn:mcp:…'
+   gcloud agent-registry mcp-servers describe crm-mcp --project=PROJECT_ID --location=us-central1
+   ```
+   The server's details page has these tabs:
+   - **Overview:** URN, location and an ADK snippet.
+   - **Tools:** schema and **annotations** per tool, with a per-tool ADK snippet.
+   - **Observability:** latency, traffic, errors and token spend.
+   - **Security:** Security Command Center findings for that resource.
+
+   In Terraform, use the data source `google_agent_registry_mcp_server`.
+5. **Update when the server changes.** The registry never re-scans a manually registered server, so new tools stay invisible until you upload the spec again:
+   ```bash
+   gcloud agent-registry services update crm-mcp --project=PROJECT_ID --location=us-central1 \
+     --mcp-server-spec-content=new-toolspec.json
+   ```
+   The upload **replaces** the whole tool list; it doesn't merge. The display name and description can be edited in the console under Overview → **Edit**.
+   - **Docs inconsistency:** the *Manage MCP tools* page says Terraform supports only `NO_SPEC` for MCP servers and can't carry tool specs, while *Register MCP servers* shows `mcp_server_spec { type = "TOOL_SPEC" }`. For tool-spec changes, use gcloud, the console or the API.
+6. **Delete.**
+   - **Manual entries:** `gcloud agent-registry services delete crm-mcp --project=PROJECT_ID --location=us-central1`. In the console, you type `DELETE` to confirm; in Terraform, remove the resource and apply. The server disappears from search and discovery.
+   - **Auto-registered Google servers:** you can't delete the entry. Disable the product API or delete the underlying server.
+   - **Clean up the dependents yourself.** Deleting the entry does **not** delete bindings or policies that reference it. **Manual cross-project entries** also never auto-update when the remote server changes or is deleted.
+
+**E. Endpoints, A2A agents and custom ADK agents (same `Service` pattern)**
+
+```bash
+# External REST API as a governable destination
+gcloud agent-registry services create payments-api --location=us-central1 --display-name="Payments API" \
+  --endpoint-spec-type=no-spec --interfaces=url=https://api.example.com/v1,protocolBinding=http-json
+
+# Composite "core Google APIs" endpoint: one IAP binding for many hostnames (hub-and-spoke gateway)
+gcloud agent-registry services create core-gapi-services --project=CENTRAL_PROJECT --location=us-central1 \
+  --display-name="Core Google APIs" --endpoint-spec-type=no-spec \
+  --interfaces=protocolBinding=jsonrpc,url=https://telemetry.googleapis.com \
+  --interfaces=protocolBinding=jsonrpc,url=https://iamcredentials.googleapis.com \
+  --interfaces=protocolBinding=jsonrpc,url=https://agentregistry.googleapis.com
+
+# A2A agent (card <= 10 KB, A2A 0.3 or 1.0; card skills are indexed for search)
+gcloud agent-registry services create billing-agent --location=global --display-name="Billing" \
+  --agent-spec-type=a2a-agent-card --agent-spec-content=@agent-card.json
+
+# Non-A2A REST agent: discoverable by name/description only, no searchable skills
+gcloud agent-registry services create travel-agent --location=global --display-name="Travel" \
+  --agent-spec-type=no-spec --interfaces=url=https://travel.example.com/v1,protocolBinding=http-json
+```
+- **Endpoint connection tests:** the console's **Test connection** works only for public URLs. You can still register private URLs.
+- **Custom ADK agent on your own infrastructure:** expose it over A2A (`to_a2a(root_agent)` serves `/.well-known/agent-card.json`), save the generated card, then register it with `--agent-spec-type=a2a-agent-card`.
+- **Skills (Preview):**
+  - Create one with `gcloud alpha agent-registry skills create SKILL_ID --location=global --display-name=… --payload=./skill.zip`, or with `--gcs-source-uri=gs://…`. For the GCS option, grant `storage.objects.get` to `service-PROJECT_NUMBER@gcp-sa-agentregistry.iam.gserviceaccount.com`.
+  - The ID becomes `private-SKILL_ID`.
+  - Limits: ZIP ≤ 500 KB compressed, ≤ 10 MB uncompressed, ≤ 1 MB per file.
+
+**F. Consuming registered MCP servers**
+
+| Search mode | Agents | MCP servers | Skills |
+|---|---|---|---|
+| Keyword (`AND`/`OR`/`NOT`) | ✅ metadata, description, **A2A skills** | ✅ description and **tools** | ✅ metadata only |
+| Prefix (`displayName:Prod_*`) | ✅ | ✅ | ✅ |
+| **Semantic** | ❌ | ❌ | ✅ indexes the whole `SKILL.md` (`--search-type=semantic`) |
+
+```bash
+gcloud agent-registry mcp-servers search --project=P --location=L --search-string="database"
+gcloud agent-registry agents search      --project=P --location=L --search-string="flight OR booking"
+gcloud alpha agent-registry skills search --project=P --location=L --query="manage relational databases" --search-type=semantic
+```
+
+**The registry as an MCP server.** It lives at `https://agentregistry.googleapis.com/mcp` over Streamable HTTP. It accepts OAuth and IAM credentials, never API keys, and `tools/list` needs no auth. Its tools:
+- **Discovery:** `search_agents`, `search_mcp_servers`, `get_agent`, `get_mcp_server`, `get_endpoint`, `get_service`, `list_*`, `list_bindings`, `get_binding`, `fetch_available_bindings`, `get_operation`.
+- **Admin:** `create_service`, `update_service`, `delete_service`, `create_binding`, `update_binding`, `delete_binding`.
+
+**ADK (Python) — resolve at runtime instead of hard-coding URLs.** Requirements: `pip install "google-adk[a2a,agent-identity]"` (the module imports both extras at load time, so a core-only install raises `ImportError`), `google-adk>=1.29.0`, and ADC.
+
+```python
+from google.adk.agents.llm_agent import LlmAgent
+from google.adk.auth.credential_manager import CredentialManager
+from google.adk.integrations.agent_identity import GcpAuthProvider
+from google.adk.integrations.agent_registry import AgentRegistry
+
+CredentialManager.register_auth_provider(GcpAuthProvider())      # lets ADK resolve auth-provider bindings
+registry = AgentRegistry(project_id=PROJECT, location="us-central1")  # optional header_provider=callable
+
+crm_tools = registry.get_mcp_toolset(
+    mcp_server_name="mcpServers/crm-mcp",                         # short form; full: projects/P/locations/L/mcpServers/ID
+    continue_uri="https://app.example.com/oauth/continue")        # only for 3-legged OAuth (user consent)
+billing = registry.get_remote_a2a_agent(
+    agent_name="agents/billing-agent",
+    httpx_client=authed_httpx_client)                             # A2A calls are NOT auto-authenticated
+
+root_agent = LlmAgent(name="orchestrator", model="gemini-flash-latest",
+                      tools=[crm_tools], sub_agents=[billing])
+```
+- **Client methods:** `list_mcp_servers(filter_str, page_size, page_token)`, `get_mcp_server(name)`, `get_mcp_toolset(mcp_server_name)` (returns an ADK `McpToolset`), `list_agents(...)`, `get_agent_info(name)`, `get_remote_a2a_agent(agent_name)` (returns a `RemoteA2aAgent`).
+- **Go:** `agentregistry.New(ctx, agentregistry.Config{ProjectID, Location})`, then `MCPToolset(ctx, name, WithMCPHTTPClient/WithMCPHeaders)` and `RemoteAgent(ctx, name, WithA2AHTTPClient/WithA2AHeaders)`.
+- **Fetch once at startup,** not per invocation, to avoid extra latency. An agent can have only one parent, so reuse a fetched remote agent under several orchestrators with `.clone()`.
+- **Production traffic** to the resolved endpoints should go through **Agent Gateway**. The registry supplies the endpoints; the gateway enforces policy.
+
+**Agent Studio (low-code)**
+- Add a tool with **Add (+) → "MCP Server from Agent Registry"**. You choose a **Location**, an **MCP Server**, and **Auth Config**, where `None` means access resolves through IAM. The option appears only **after the agent is saved**, and the agent can use **all** tools on that server.
+- **Direct MCP-URL connections and the Vertex AI Search data-store tool are deprecated,** and existing ones are read-only. To migrate:
+  - A direct MCP URL: register the server first, then re-add it from the registry.
+  - The data-store tool: switch to the **Agent Search MCP server** (`discoveryengine.googleapis.com`). The data-source selection doesn't carry over automatically.
+
+**Gemini Enterprise**
+- Admins can **import MCP servers from Agent Registry** as data stores. This requires an Agent Gateway in a region aligned with the app, with the registry associated to that gateway.
+- **Gap:** direct communication between Gemini Enterprise agents and Gemini Enterprise data connectors does **not** trigger gateway enforcement.
+
+**G. Authenticating to registered MCP servers**
+
+| Model | When | How |
+|---|---|---|
+| **Agent's own identity** (ADC = Agent Identity or a service account) | Google Cloud MCP servers and tools | The agent identity needs `agentregistry.viewer`, **plus** the product's own roles (for example Compute Instance Admin for a Compute Engine MCP tool), **plus** `mcp.toolUser` for Google remote MCP servers. ADK attaches Google auth headers to Google MCP servers automatically. For remote A2A agents, pass an authenticated `httpx.AsyncClient` |
+| **Auth manager: API key or 2-legged OAuth** | Custom or external tools called with the agent's own credentials | Create an **auth provider** in the Agent Identity auth manager, then **bind** it to the agent. No credentials in code |
+| **Auth manager: 3-legged OAuth** | The tool must act **on behalf of the user** (consent, delegated permission) | Create an auth provider with redirect URIs and bind it. The client app must handle the **`adk_request_credential`** function call, and the code passes **`continue_uri`** to `get_mcp_toolset`. The platform prompts for consent, stores the token, then resumes |
+| **Custom headers** (`header_provider`) | External toolsets that don't support the auth manager, or for extra context | Headers go **only to the target MCP server**, never to the Agent Registry API (which always uses ADC) and never to A2A agents |
+
+```bash
+# Auth-provider binding (needs roles/agentregistry.admin; the auth-provider path must use the project ID)
+gcloud agent-registry bindings create crm-oauth \
+  --project=PROJECT_ID --location=us-central1 --display-name="CRM OAuth" \
+  --source-identifier="urn:agent:projects-123:projects:123:locations:us-central1:aiplatform:reasoningEngines:456" \
+  --auth-provider="projects/PROJECT_ID/locations/us-central1/connectors/crm-oauth-provider"
+# Resource binding (agent -> MCP server), used to map orchestrator-to-tool relationships
+gcloud agent-registry bindings create orch-to-crm --project=PROJECT_ID --location=us-central1 \
+  --display-name="Orchestrator to CRM" --source-identifier="urn:agent:…" --target-identifier="urn:mcp:…"
+# also: gcloud agent-registry bindings list | describe | update | delete
+```
+In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth_provider_binding { auth_provider, scopes, continue_uri }`. Bindings aren't available in `us`/`eu`.
+
+**H. Governance: what registration unlocks**
+- **Agent Gateway (egress, `AGENT_TO_ANYWHERE`)** attaches up to two registries: one global and one regional or multi-regional. Destinations must be **registered** or matched by an explicit unregistered-host rule; otherwise the default is **deny**. One gateway governs up to 5,000 registered resources. If the registry is regional, policies apply only to resources in that region (see §5.1).
+- **IAM egress (allow) policies through IAP**, bound to registry resources:
+  ```bash
+  gcloud iap web set-iam-policy policy.json --project=PROJECT_ID \
+    --resource-type=agent-registry --mcp-server=crm-mcp --region=us-central1
+  # --agent=ID | --endpoint=ID | no resource flag = the whole registry; --folder/--organization also accepted
+  # Google-managed MCP servers: --region=global
+  ```
+  ```json
+  {"policy": {"bindings": [{"role": "roles/iap.egressor",
+    "members": ["principal://agents.global.org-ORG/resources/aiplatform/projects/NUM/locations/us-central1/reasoningEngines/support"],
+    "condition": {"title": "read-only CRM tools",
+      "expression": "api.getAttribute('iap.googleapis.com/mcp.tool.isReadOnly', false) == true"}}]}}
+  ```
+  The console condition builder offers **Name, ReadOnly, Destructive, Idempotent and Open World**. In Unified Access Policies, the equivalent attributes are `destination.agent_registry.mcp_server.tool.annotations.read_only_hint` / `destructive_hint` / `idempotent_hint` / `open_world_hint` and `…mcp_server.tool.name`.
+- **Policies are validated when you bind them, not at runtime.** Binding to an unregistered resource fails immediately with `NOT_FOUND`, so the docs recommend defining policies in CI/CD.
+- **Annotations are declarations, not proofs.** For manual servers, whoever writes `toolspec.json` asserts `readOnlyHint`. Annotation-based CEL is only as trustworthy as the people who can edit the registry, which is another reason to keep editor and admin roles away from agents.
+- **Content and semantics:**
+  - **Semantic governance policies** and **Model Armor** run at the gateway on top of IAM.
+  - For Google MCP servers, Model Armor floor settings can scan all traffic: `gcloud model-armor floorsettings update --full-uri=projects/P/locations/global/floorSetting --add-integrated-services=GOOGLE_MCP_SERVER --google-mcp-server-enforcement-type=INSPECT_AND_BLOCK`. If the agent and server are in different projects, floor settings in both projects mean Model Armor is invoked twice.
+- **Visibility:**
+  - Each MCP server's **Observability** tab. For the gateway's own Observability tab, see §5.1.
+  - The **topology** graph, keyed by resource URI.
+  - Agent Platform **Security** tab and per-resource **Security** tabs, which surface Security Command Center findings such as excessive permissions and toxic combinations.
+
+**I. Quotas and limits**
+
+| Limit | Value |
+|---|---|
+| Agents, MCP servers, endpoints, bindings, A2A skills, standalone skills per project | **100 each** (global and per region; quota can be raised) |
+| Skill revisions per skill | 100 |
+| API rate | 12,000/min aggregate (200 QPS); 1,200/min global (20 QPS); 1,200/min per region |
+| Agent spec (Agent Card) and MCP tool spec content | **10 KB** each |
+| A2A skills or tools per service | **100** |
+| Display name / description | 63 / 2,048 characters |
+| Page size | 100 |
+
+**J. End-to-end flow**
+
+```text
+1 REGISTER   Google MCP ── enable product API ──────────┐
+             GKE label / Cloud Run --functional-type ────┼──► Service ──projects──► McpServer
+             gcloud agent-registry services create ──────┘    (writable)            (read-only: tools + annotations)
+               --mcp-server-spec-type=tool-spec                                          │
+                                                                                         ▼
+2 DISCOVER   gcloud … mcp-servers search · registry MCP search_mcp_servers
+             ADK AgentRegistry.get_mcp_toolset() · Agent Studio "MCP Server from Agent Registry"
+                                                                                         │
+                                                                                         ▼
+3 BIND/AUTH  own identity: agentregistry.viewer + product roles + mcp.toolUser
+             or bindings create --auth-provider=…/connectors/X  (API key · 2LO · 3LO + continue_uri)
+                                                                                         │
+                                                                                         ▼
+4 CALL       Agent ──► Agent Gateway (AGENT_TO_ANYWHERE)
+                         a. IAP: iap.egressor on the registered target? (CEL: tool name, read-only hint)
+                         b. destination registered? otherwise DENY
+                         c. Model Armor · semantic governance
+                       ──► MCP server  tools/call
+```
+
+**K. Decision tables**
+
+| Choose | When |
+|---|---|
+| **Automatic** registration | A Google remote MCP server (just enable the API), GKE with the label and annotations, Cloud Run with `--functional-type=mcp-server`. The server is in the **same project** as the registry. You want lifecycle sync and zero tool-spec maintenance |
+| **Manual** (`services create`) | External, SaaS, on-premises or unsupported runtimes. A server in **another project** that a central gateway must govern. You want to publish only a **curated subset** of tools. Accept the cost: you maintain the tool spec and the entry's lifecycle |
+| Register as an **Endpoint** instead of an MCP server | The destination is a plain REST API, or you only need host-level allow or deny. Tool-level CEL and tool discovery need an **MCP server** entry |
+
+| Registry-resolved (`get_mcp_toolset`) | Hard-coded `McpToolset(url=…)` |
+|---|---|
+| Central discovery and reuse; gateway can enforce; bindings supply credentials without code; URL changes need no redeploy | Fewer moving parts for a single prototype. **Nothing to govern**: under an enforcing egress gateway, an unregistered host is denied anyway |
+| Cost: registry dependency at startup (fetch once and cache), plus IAM and binding setup | Cost: URLs and credentials in code, no inventory, no annotation-based policy |
+
+| Agent Registry skills (`Skill` resources, Preview) | Skill Registry (Agent Platform, Preview) |
+|---|---|
+| Governed **inside the registry** next to agents and MCP servers. `gcloud alpha agent-registry skills …`. Semantic search. ZIP ≤ 500 KB | Separate Agent Platform service consumed in ADK through `GCPSkillRegistry` + `SkillToolset` (`search_skills` / `load_skill`). Its own payload validation (ZIP ≤ 10 MB). The Skill Registry docs point to Agent Registry for central governance |
+
+Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, §3.2.3), which is a toolset factory for Google-managed MCP servers. It is **not** the governance catalog that Agent Gateway enforces against.
+
+**L. Gotchas (high-yield)**
+- **No introspection on manual entries.** New tools are invisible until you run `services update --mcp-server-spec-content=…`, which is a **full replace**.
+- **Update the `Service`, not the `McpServer`.** The typed resources are read-only.
+- **Google MCP servers are global:** `--region=global` on policy bindings, otherwise `NOT_FOUND`.
+- **No manual registration or bindings in `us`/`eu`.**
+- **Auto-registration is single-project;** cross-project entries must be registered manually and you own their lifecycle.
+- **Remove an auto-registered Google server** by disabling its API. There's no "delete entry" for it.
+- **Bindings need `agentregistry.admin`;** editor can register but can't bind.
+- **Unannotated tools default to destructive and open-world.** CEL on `read_only_hint` then denies them.
+- **"Import tools" in the console works only for public URLs.** For private servers, paste the spec.
+- **The registry MCP server rejects API keys.** `tools/list` is anonymous; `tools/call` needs `mcp.toolUser`.
+- **`header_provider` never authenticates to the registry API,** and it doesn't apply to A2A agents.
+- **URNs are for lookup only.** IAM always uses the agent **principal**.
+
+**Signals**
+- "Make the partner's hosted MCP server discoverable and governable" → **manual `services create --mcp-server-spec-type=tool-spec`** plus a `toolspec.json`.
+- "BigQuery MCP appears in the registry without any action" → it was **auto-registered when the BigQuery API was enabled** (`global`).
+- "Custom MCP server on Cloud Run should self-register" → **`--functional-type=mcp-server`**.
+- "MCP server on GKE should self-register with its tools" → **`registry.gke.io/functional-type: "MCP_SERVER"`** plus the `modelcontextprotocol.info/*` annotations.
+- "Registry shows old tool list" → **`services update --mcp-server-spec-content`** (no re-scan).
+- "Agent should call tool as the signed-in user" → **auth manager 3LO + binding + `continue_uri`**.
+- "Allow only read-only tools from this server" → **IAP egress policy with a CEL condition on the read-only annotation**.
+- "Central security project governs agents in many projects" → **manual registration in the central registry** (same region or global) plus `iap.egressor`.
+- "Low-code agent needs a registered MCP tool" → **Agent Studio → MCP Server from Agent Registry**.
+
+**Distractors**
+- Expecting the registry to re-scan a manually registered server.
+- Patching the `McpServer` resource.
+- Using a URN as an IAM member.
+- Registering in `us`/`eu` to satisfy residency, then trying to bind.
+- Expecting `--region=us-central1` to work for Google MCP servers.
+- Using semantic search for MCP servers (it exists only for skills).
+- Granting agents `agentregistry.editor` "so they can self-register".
+- Relying on auto-registration across projects.
+- Registering an MCP server as a plain Endpoint and expecting tool-level policies.
+- Giving Cloud Run `--functional-type=agent` without `agent-identity`.
 
 ---
 
@@ -1772,6 +2557,70 @@ D. Lower the model temperature
 
 **Answer: B.** Semantic governance evaluates each proposed tool call against user intent and constraints, can reference parameters, resists context poisoning, and changes without redeploying. Instructions can be overridden by injected text, and removing IAM access breaks legitimate refunds.
 
+**16.** A logistics company uses a partner's hosted MCP server at `https://mcp.partner.example/mcp`. Orchestrator agents must discover the server and its tools at runtime, and security wants tool-level egress policies at Agent Gateway. What should the platform team do?
+A. Deploy a Cloud Run proxy with `--functional-type=mcp-server` so the partner server is auto-registered
+B. Run `gcloud agent-registry services create` with `--mcp-server-spec-type=tool-spec`, `--mcp-server-spec-content=@toolspec.json` and `--interfaces=url=…,protocolBinding=jsonrpc` in a supported region
+C. Register the URL as an Endpoint with `--endpoint-spec-type=no-spec`
+D. Hard-code the URL in `McpToolset` and rely on the gateway's unregistered-host allow rule
+
+**Answer: B.** An external server needs manual registration, and the registry does not introspect it, so you must supply the tool spec for tools to be discoverable and policy-addressable. An Endpoint entry gives only host-level control. An unregistered-host rule can't express tool-level conditions.
+
+**17.** The team added three tools to a manually registered MCP server last week. Agents still can't find them with `search_mcp_servers`, and the console's **Tools** tab shows the old list. What is the fix?
+A. Wait for the registry's nightly re-scan
+B. Patch the `McpServer` resource with the new tools
+C. Run `gcloud agent-registry services update SERVER --mcp-server-spec-content=new-toolspec.json` with the complete tool list
+D. Delete and recreate the auth-provider binding
+
+**Answer: C.** Manual entries are never re-introspected. You update the writable `Service`, and the uploaded spec **replaces** the existing tool definitions, so it must contain every tool. `McpServer` is read-only.
+
+**18.** An engineer binds an IAP egress policy to the auto-registered BigQuery MCP server with `gcloud iap web set-iam-policy … --resource-type=agent-registry --mcp-server=… --region=us-central1`. It fails with `NOT_FOUND`, although the server appears in the registry. Why?
+A. The BigQuery API isn't enabled
+B. Google-managed remote MCP servers are registered in the `global` location, so the binding must use `--region=global`
+C. Policies can't reference auto-registered servers
+D. The engineer lacks `roles/agentregistry.editor`
+
+**Answer: B.** Google remote MCP servers are auto-registered globally. Regional bindings on them aren't supported and return `NOT_FOUND`. The server is visible, so its API is already enabled.
+
+**19.** A bank runs a central governance project with an egress Agent Gateway in `us-central1`. MCP servers are deployed to Cloud Run in 12 workload projects with `--functional-type=mcp-server`. Agents calling them through the central gateway are denied as unregistered destinations. What is the best fix?
+A. Enable the Agent Registry API in the central project and wait for cross-project auto-discovery
+B. Manually register each MCP server in the central project's registry (in `us-central1` or `global`), grant `roles/iap.egressor` to the agent principals on those entries, and manage the entries' lifecycle
+C. Attach all 12 workload-project registries to the gateway
+D. Switch the gateway to `CLIENT_TO_AGENT` mode
+
+**Answer: B.** Automatic registration is single-project, so cross-project components must be registered manually in the central registry, aligned by region, and their entries don't auto-update. A gateway attaches at most two registries (one global and one regional). Cross-project governance is egress-only.
+
+**20.** An ADK agent must create Jira issues **as the signed-in employee**, with user consent. No OAuth secrets may appear in code. The Jira MCP server is registered in Agent Registry. What should you implement?
+A. Store a Jira API key in Secret Manager and send it through `header_provider`
+B. Create a 3-legged OAuth auth provider in Agent Identity auth manager, bind it to the agent with `gcloud agent-registry bindings create … --auth-provider=…`, handle `adk_request_credential` in the client, and pass `continue_uri` to `get_mcp_toolset`
+C. Grant the agent identity `roles/mcp.toolUser`
+D. Create a resource binding with `--target-identifier` set to the Jira server's URN
+
+**Answer: B.** Delegated user access is 3LO through the auth manager. The binding lets ADK resolve the provider automatically, and `continue_uri` is where the user returns after consent. An API key acts as the agent, not the user. `mcp.toolUser` only covers Google MCP servers.
+
+**21.** To "speed up onboarding," a platform team grants every agent identity `roles/agentregistry.editor` so that agents can self-register the tools they build. The security review flags this. What is the main risk?
+A. Editors can't search the registry
+B. An agent could modify tool annotations such as `readOnlyHint` or `destructiveHint`, which egress policies rely on, and could enroll a malicious third-party agent or server
+C. Editor exceeds the 100-bindings quota
+D. Editor grants `iap.egressor` implicitly
+
+**Answer: B.** The docs explicitly warn against giving admin or editor roles to agents, because annotation and metadata tampering can make destructive tools look safe. Agents should hold `agentregistry.viewer`. Editor can't even create bindings (that needs admin).
+
+**22.** A low-code team's Agent Studio agent connects directly to an internal MCP server by URL. After a platform update, the tool is read-only and can't be edited. What should they do?
+A. Recreate the agent in ADK
+B. Register the MCP server in Agent Registry, remove the legacy direct connection, then add it through **Add (+) → MCP Server from Agent Registry** (Location, server, Auth Config)
+C. Re-enter the same URL as a new direct MCP connection
+D. Convert the server to an A2A agent
+
+**Answer: B.** Agent Studio has deprecated direct MCP-server connections, and existing ones become read-only, in favor of registered servers. The server must be registered first. The agent then gets all of that server's tools, with access resolved through IAM when Auth Config is `None`.
+
+**23.** A support agent may call any **read-only** tool on the registered `crm-mcp` server, including tools added in the future, but no write tools. The server's tool spec carries accurate MCP annotations. What is the most precise and maintainable control?
+A. List the allowed tool names in the agent's system instruction
+B. Bind an IAP egress allow policy on `crm-mcp` (`gcloud iap web set-iam-policy … --mcp-server=crm-mcp`), granting `roles/iap.egressor` to the agent principal with a CEL condition on the tool's read-only attribute
+C. A Model Armor template with prompt-injection filtering
+D. Remove the write tools from the MCP server's code
+
+**Answer: B.** Egress IAM policies at Agent Gateway can condition on registry tool annotations, so new read-only tools are covered automatically and write tools are denied. Instructions are bypassable. Model Armor inspects content, not tool permissions. Removing tools breaks other consumers.
+
 ---
 
 ### Key doc links
@@ -1800,6 +2649,16 @@ D. Lower the model temperature
 - Agent Identity overview (IAM): https://docs.cloud.google.com/iam/docs/agent-identity-overview
 - Agent Runtime identity setup / access: https://docs.cloud.google.com/gemini-enterprise-agent-platform/build/runtime/setup · https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/manage-agent-access
 - Agent Registry: https://docs.cloud.google.com/agent-registry/overview · https://docs.cloud.google.com/agent-registry/concepts · https://docs.cloud.google.com/agent-registry/manage-mcp-tools · https://docs.cloud.google.com/agent-registry/use-agentregistry-mcp · https://docs.cloud.google.com/agent-registry/register-skills · https://docs.cloud.google.com/agent-registry/manage-skill-revisions
+- Agent Registry deep dive (MCP servers): data model https://docs.cloud.google.com/agent-registry/data-model · setup https://docs.cloud.google.com/agent-registry/setup · register MCP servers https://docs.cloud.google.com/agent-registry/register-mcp-servers · JSON schemas (toolspec / Agent Card) https://docs.cloud.google.com/agent-registry/json-schemas · locations https://docs.cloud.google.com/agent-registry/locations · roles https://docs.cloud.google.com/agent-registry/roles-permissions · quotas https://docs.cloud.google.com/agent-registry/quotas
+- Agent Registry registration: automatic https://docs.cloud.google.com/agent-registry/automatic-registration · manual https://docs.cloud.google.com/agent-registry/manual-registration · agents https://docs.cloud.google.com/agent-registry/register-agents · endpoints https://docs.cloud.google.com/agent-registry/register-endpoints · custom ADK agents https://docs.cloud.google.com/agent-registry/register-custom-adk-agents
+- Agent Registry consumption and auth: search https://docs.cloud.google.com/agent-registry/search-agents-and-tools · resolve endpoints / build orchestrators https://docs.cloud.google.com/agent-registry/resolve-endpoints-and-build-orchestrators · authenticate toolsets https://docs.cloud.google.com/agent-registry/authenticate-toolsets · bindings https://docs.cloud.google.com/agent-registry/manage-bindings · REST `Service` https://docs.cloud.google.com/agent-registry/reference/rest/v1/projects.locations.services
+- ADK Agent Registry client: https://adk.dev/integrations/agent-registry/
+- Cloud Run functional types (`--functional-type=agent|mcp-server`): https://docs.cloud.google.com/run/docs/ai/agent-platform-features
+- IAM egress policies on registry resources (`gcloud iap web set-iam-policy --resource-type=agent-registry`): https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/policies/configure-iam-policies
+- Agent Studio (MCP Server from Agent Registry, legacy-tool migration): https://docs.cloud.google.com/gemini-enterprise-agent-platform/agent-studio/design-agents
+- Gemini Enterprise: import MCP servers from Agent Registry: https://docs.cloud.google.com/gemini/enterprise/docs/connectors/custom-mcp-server/import-govern-mcp-server-agent-registry
+- Google Cloud MCP servers, enable and manage: https://docs.cloud.google.com/mcp/enable-disable-mcp-servers · https://docs.cloud.google.com/mcp/manage-mcp-servers
+- Agent Platform security findings: https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/view-security-findings
 - Skill Registry: https://docs.cloud.google.com/gemini-enterprise-agent-platform/build/skill-registry
 - Google Cloud MCP servers (supported products): https://docs.cloud.google.com/mcp/supported-products · auth: https://docs.cloud.google.com/mcp/set-up-authentication-mcp-servers
 - Policies (IAM + semantic governance): https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/policies/overview · https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/policies/semantic-governance-overview
@@ -2520,6 +3379,279 @@ toolset = McpToolset(
 | Audit | Logs show the agent only | Logs show **agent + user** |
 | Ops | No consent UX | Consent popup, `continue_uri` handler, token revocation |
 
+### 5.1.1b Deep dive — Agent-to-tool authentication patterns
+
+> 📊 **Infographic:** Agent-to-tool authentication
+>
+> [![Agent-to-tool authentication](infographics/18-agent-to-tool-auth.png)](infographics/18-agent-to-tool-auth.png)
+
+The exam tests this area heavily. Almost every agent-to-tool auth question comes down to three decisions:
+
+1. **Whose authority?** The agent's own (Agent Identity, a service account, 2LO, or an API key), or the end user's (3LO or a platform-passed user token).
+2. **What does the destination accept?** Google APIs accept a Google **access token**. Your own IAM-protected services (Cloud Run, IAP) accept a Google-signed **ID token** whose `aud` claim matches them. SaaS accepts **its own** OAuth token or API key. Maps-style Google services that aren't IAM-based accept a **Google API key**.
+3. **Where does the secret live?** In the auth manager vault, in Secret Manager, or nowhere, because the metadata server mints short-lived tokens. It never belongs in code, prompts, or model-visible state.
+
+**Token types in one table**
+
+| Token | Proves | Audience / scope | Accepted by | Typical lifetime |
+|---|---|---|---|---|
+| Google **access token** (OAuth 2.0) | Permissions of a principal (agent, SA, WIF, user) | OAuth scopes (`cloud-platform`, `bigquery`…) + IAM roles | Google APIs and **Google remote MCP servers** (`bigquery.googleapis.com/mcp`, `run.googleapis.com/mcp`…) | 1 h by default (`gcloud auth print-access-token --lifetime` up to 12 h) |
+| Google **ID token** (OIDC JWT) | Identity of the caller | `aud` = receiving service URL, or a configured custom audience | Cloud Run / Cloud Run functions (`run.invoker`), IAP (`iap.httpsResourceAccessor`), your own JWT validators | ~1 h. Fetched per request, no background refresh in ADK |
+| **Third-party OAuth** token | Agent (2LO) or user (3LO) authority at the SaaS | SaaS scopes | Jira, GitHub, Salesforce, ServiceNow… | Set by the SaaS. Refresh token needed for 3LO |
+| **API key** | "Caller has the key". No principal | API restrictions on the key | Services that don't need a principal (Maps Grounding Lite MCP, Translation v2), SaaS keys | Until rotated |
+| **Agent X.509 cert** | The agent's SPIFFE identity (mTLS) | — | Google APIs over mTLS, Agent Gateway | 24 h, auto-rotated |
+
+> Rule of thumb from the ADK docs: an **access token is your keycard** (it calls Google APIs), and an **ID token is your passport** (it calls your own IAM-secured services). Sending an access token to a private Cloud Run service gets a 401. So does sending an ID token to BigQuery.
+
+#### Master matrix — destination → auth
+
+| Destination | Recommended auth | Identity used | Where creds live | IAM / config needed | Exam keyword |
+|---|---|---|---|---|---|
+| **Google Cloud APIs** (BigQuery, GCS, Vertex/Gemini) | Agent Identity through ADC. Client libraries fetch a cert-bound access token | **Agent** (or user with 3LO: auth-manager 3LO provider with a Google authorization URL and scopes) | Nowhere. Minted by the metadata server | Resource-level role to `principal://agents.global.org-ORG.system.id.goog/resources/aiplatform/projects/NUM/locations/L/reasoningEngines/ID` (Cloud Run agents: `.../resources/run/projects/NUM/locations/L/services/NAME`) | "per-agent least privilege", "no keys", "ADC" |
+| **Google remote MCP servers** (BigQuery, Cloud Run, Monitoring, IAM… MCP) | ADC/OAuth access token in `Authorization: Bearer`, plus `x-goog-user-project` | Agent/workload (production) or user | Nowhere (ADC), or auth-manager 3LO for user delegation | **`roles/mcp.toolUser`** (`mcp.tools.call`) **plus** the product role (e.g. `bigquery.dataViewer`). The MCP endpoint must be enabled. IAM **deny** on `mcp.googleapis.com/tools.call` with `tool.isReadOnly` blocks write tools | "MCP Tool User", "read-only MCP tools org-wide", "no DCR" |
+| **Custom MCP server on Cloud Run** | Google-signed **ID token**, `aud` = service URL. Deploy `--no-allow-unauthenticated --functional-type=mcp-server` | **Agent** (Cloud Run IAM sees the caller only) | Nowhere. The metadata server mints the ID token | **`roles/run.invoker`** on the service for the calling agent's principal. For developer/CLI access: `--iap` + `roles/iap.httpsResourceAccessor` + a custom OAuth client allowlisted for programmatic access | "run.invoker", "audience", "X-Serverless-Authorization" |
+| **MCP server on GKE** | Server validates a Google ID token (`aud` check), or put it behind IAP, a service mesh (mTLS), or Agent Gateway as a registered endpoint (pattern, unverified as a single documented recipe) | Agent (caller). The server's own calls use **Workload Identity Federation for GKE** | Nowhere (WIF), or Secret Manager for SaaS keys the server uses | Server → Google APIs: role to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA` | "GKE", "no service account keys", "Workload Identity" |
+| **SaaS with API key** | **Auth manager API-key provider**. ADK injects the header | Agent | Auth manager vault (Google-managed) | `roles/agentidentity.user` **on the auth provider** for the agent principal | "no hardcoded keys", "centralized vault" |
+| **SaaS with OAuth client credentials (2LO)** | **Auth manager 2LO provider** (client ID/secret + token URL). No user, no consent | Agent | Vault holds the client secret. Access tokens minted and injected | `roles/agentidentity.user` on the provider | "machine-to-machine", "batch", "no user present" |
+| **SaaS acting as the user (3LO)** | **Auth manager 3LO provider** + `continue_uri` handler in your frontend. In Gemini Enterprise: a Discovery Engine **authorization resource** | **User** (delegated), attributed to agent + user | Vault stores the user's tokens and refreshes them | `roles/agentidentity.user` on the provider. Redirect URI registered at the SaaS = the auth-manager `.../oauthcallback` URL | "on behalf of", "consent", "user's own permissions" |
+| **Another agent via A2A** | Agent Runtime target: Google **access token** (ADC). Cloud Run target: **ID token** (`aud` = URL). Public target: whatever its **agent card `securitySchemes`** declare | Calling agent (or user token forwarded in `Authorization` when GE calls with `toolAuthorizations`) | Nowhere (ADC/metadata), or auth-manager binding | Agent Runtime: `roles/aiplatform.user` on the target reasoning engine + `roles/agentregistry.viewer` for discovery, **granted to the parent agent's identity**. Cloud Run: `roles/run.invoker`. Via Agent Gateway: an Access policy allowing `destination.agent_registry.agent.name` | "A2A", "agent card", "orchestrator identity" |
+| **OpenAPI / REST tools** | `OpenAPIToolset`/`RestApiTool` with `auth_scheme` + `auth_credential` (API key, OAuth2, OIDC, service account, or `ServiceAccount(use_id_token=True, audience=...)` for IAM-protected APIs). Or `GcpAuthProviderScheme` via `AuthenticatedFunctionTool` | Depends on the scheme | Auth manager (preferred), or Secret Manager + session state (self-managed) | Depends on the target | "OpenAPI spec", "securitySchemes", "AuthCredential" |
+| **Databases via MCP Toolbox** | Agent → Toolbox (on Cloud Run): ID token via `CredentialStrategy.workload_identity(target_audience=TOOLBOX_URL)`. Toolbox → DB: the server's own identity | Agent to Toolbox. **User** scoping through Toolbox **authenticated parameters** (bind `user_id` etc. from the user's OIDC token) and **authorized invocations** | Toolbox server config. DB passwords in Secret Manager, or IAM DB auth (unverified per engine) | `run.invoker` on Toolbox for the agent. DB-level grants for Toolbox's SA | "row-level per user", "SQL defined server-side, not by the LLM" |
+
+> **Correction/nuance to "IAM can't see MCP tool names":** for **Google Cloud remote MCP servers**, IAM **deny** policies can condition on `mcp.googleapis.com/tool.isReadOnly`, `tool.name`, `resource.service`, and `request.auth.oauth.client_id` (the last one is deny-only). These attributes apply **only** to the `mcp.tools.call` permission. For **your own** MCP servers, IAM sees only `run.invoker`. Tool-level control there needs Agent Gateway Access policies (or in-server authz).
+
+#### Identity choices compared
+
+| | **Agent Identity** | **Attached service account** (Agent Runtime default, Cloud Run `--service-account`) | **Workload Identity Federation** (GKE / external) | **End-user OAuth** (3LO / GE token) |
+|---|---|---|---|---|
+| Where available | Agent Runtime, Gemini Enterprise, **Cloud Run** (`--functional-type=agent --identity-type=agent-identity`, Preview) | Everywhere | GKE pods (KSA principal); on-prem or other clouds through a WIF pool | Any agent, through the auth manager, GE authorizations, or ADK native OAuth |
+| Principal | `principal://agents.global.org-ORG.system.id.goog/resources/...` (SPIFFE) | `serviceAccount:name@proj.iam.gserviceaccount.com` | `principal://iam.googleapis.com/.../workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA` | The human's account at Google or the SaaS |
+| Keys / impersonation | **No SA keys. Can't be impersonated.** Not shared | Keys possible (a risk). Impersonation possible. Often shared | No keys. Short-lived federated tokens | Refresh tokens must be vaulted |
+| Token theft | Cert-bound (CAA: mTLS, DPoP beyond the gateway) | Bearer, replayable | Bearer, replayable | Bearer at the SaaS. Vaulted by auth manager; with Agent Gateway + GE, **decrypted only at the gateway, so the agent never sees the raw credential** |
+| Lifecycle | Tied to the resource. **Re-create means a new principal** (Cloud Run too, when switching SA → agent-identity) | Independent of the agent | Tied to the KSA name | Per user. Consent can be revoked |
+| Audit shows | Agent SPIFFE ID (`principalSubject`). With delegation: **agent + user** | SA only. User attribution must be built by hand | Federated principal | User (+ agent when brokered by the auth manager) |
+| Pick when | Default for new agents on supported runtimes | Legacy, unsupported runtime, or a shared back-office job | Self-hosted agents or MCP servers on GKE | Per-user data or entitlements. Blocks confused-deputy attacks |
+
+**Acting as the agent vs on behalf of the user: audit attribution.** When the agent uses its own authority, Cloud Audit Logs show only the agent principal. Any "which user asked?" answer has to come from your own logging (session → user), and that link is the confused-deputy risk. With 3LO through the auth manager, the docs state that logs show **both the agent's and the user's identities**, and that all end-user access events are attributable to the agent's SPIFFE ID. With service-account impersonation, `serviceAccountDelegationInfo` shows the chain, but no end user appears.
+
+#### 3LO sequence (Agent Identity auth manager + ADK)
+
+```
+User        Frontend (your app)        Agent (ADK on Agent Runtime)        Auth manager (agentidentitycredentials)        SaaS (Jira/GitHub/Google)
+ |  "create a Jira issue"  |                         |                                   |                                           |
+ |------------------------>|---- stream_query ------>|                                   |                                           |
+ |                         |                         |-- retrieveCredentials (SPIFFE ID, needs roles/agentidentity.user) -->       |
+ |                         |                         |<-- uri_consent_required: authorization_uri + consent_nonce ---|              |
+ |                         |<-- FunctionCall adk_request_credential (auth_uri, nonce) --|                           |              |
+ |                         |  save fc.id + auth_config + nonce in session                 |                           |              |
+ |<-- popup auth_uri ------|                         |                                   |                                           |
+ |---------------------------------------- sign in + consent (scopes) ------------------------------------------------------------->|
+ |                         |                         |                                   |<-- code -> .../authProviders/NAME/oauthcallback (redirect URI registered at SaaS)
+ |                         |                         |                                   |-- code exchange, store access+refresh token in vault
+ |<-- redirect to continue_uri?user_id_validation_state=..&auth_provider_name=..&uuid=.. |                                   |
+ |------------------------>| POST {auth_provider}/credentials:finalize {userId, userIdValidationState, consentNonce}  --->|   |
+ |                         |<------------------------------------ 200 ------------------------------------------------|        |
+ |                         |-- FunctionResponse(name=adk_request_credential, id=fc.id, response=auth_config) -->|              |
+ |                         |      (no auth code needed; resume even if consent failed, ADK raises if it did)                    |
+ |                         |                         |-- retrieveCredentials -------------->| returns user token (refreshed if needed)  |
+ |                         |                         |------------------------ tool call, Authorization: Bearer <user token> ------->|
+ |                         |<------- answer ---------|<----------------------------------------------------- data as the user -------|
+ ... later: token expiry -> auth manager refreshes silently. Refresh token revoked/expired -> consent_required again.
+ ... admin: disable/delete the auth provider (all agents stop), or revoke a user's delegation (auth manager provides revocation; exact CLI unverified)
+```
+
+**`continue_uri` vs redirect URI (a frequent trap).** The **redirect URI** registered in the SaaS/Google OAuth client is the auth manager's callback: `https://agentidentitycredentials.googleapis.com/v1/projects/PROJECT_ID/locations/LOCATION/authProviders/NAME/oauthcallback`. The **`continue_uri`** is **your app's** endpoint that the user lands on afterwards, where you call `credentials:finalize`. It can be defaulted on the provider with `--three-legged-oauth-default-continue-uri`. Mixing the two up gives `redirect_uri_mismatch`.
+
+**Native ADK 3LO (no auth manager) differs as follows:**
+- Your client appends **its own** `redirect_uri` to `auth_uri`, captures the full callback URL, and sets `auth_config.exchanged_auth_credential.oauth2.auth_response_uri` (and `redirect_uri`).
+- It then sends a `FunctionResponse` named `adk_request_credential`. ADK performs the code exchange and **retries the tool**.
+- You own token storage and refresh. With the ADK Resume feature, include the original `invocation_id`.
+
+**Gemini Enterprise variant:**
+- **Setup.** Create an OAuth web client with redirect URIs `https://vertexaisearch.cloud.google.com/oauth-redirect` and `https://vertexaisearch.cloud.google.com/static/oauth/oauth.html`. Create an authorization with `serverSideOauth2`. Build the auth URI with `access_type=offline&prompt=consent&include_granted_scopes=true`, and reference it in the agent's `authorizationConfig.toolAuthorizations`.
+- **Runtime.**
+  - For an ADK agent, GE runs consent and places the user's token in session state under the authorization ID. Read it with `external_access_token_key="AUTH_ID"` (BigQuery toolset) or from `tool_context.state`.
+  - For an A2A agent on Cloud Run, the user token arrives in `Authorization` and the service-agent ID token in `X-Serverless-Authorization`.
+
+#### ADK snippets (current API, Python)
+
+**1. OpenAPI tool with OAuth2 (native ADK 3LO)**
+
+```python
+from fastapi.openapi.models import OAuth2, OAuthFlows, OAuthFlowAuthorizationCode
+from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
+from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+
+scheme = OAuth2(flows=OAuthFlows(authorizationCode=OAuthFlowAuthorizationCode(
+    authorizationUrl="https://accounts.google.com/o/oauth2/auth",
+    tokenUrl="https://oauth2.googleapis.com/token",
+    scopes={"https://www.googleapis.com/auth/calendar.readonly": "read calendar"})))
+cred = AuthCredential(auth_type=AuthCredentialTypes.OAUTH2,
+    oauth2=OAuth2Auth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET))  # from Secret Manager, never literals
+calendar = OpenAPIToolset(spec_str=spec, spec_str_type="yaml", auth_scheme=scheme, auth_credential=cred)
+# API key: token_to_scheme_credential("apikey", "header", "X-API-Key", key)
+# OIDC:    OpenIdConnectWithConfig(authorization_endpoint=..., token_endpoint=..., scopes=["openid"])
+```
+
+**2. IAM-protected service on Cloud Run: ID token (OpenAPI) and MCPToolset header**
+
+```python
+# OpenAPI toolset -> private Cloud Run API: ID token, audience = service URL
+from google.adk.auth.auth_credential import ServiceAccount
+from google.adk.tools.openapi_tool.auth.auth_helpers import service_account_scheme_credential
+scheme, cred = service_account_scheme_credential(ServiceAccount(
+    use_default_credential=True, use_id_token=True, audience="https://mcp-x-123.us-central1.run.app"))
+# use_id_token and audience must be set together; ADK raises otherwise.
+
+# McpToolset -> custom MCP server on Cloud Run: mint a fresh ID token per call
+import google.auth.transport.requests, google.oauth2.id_token
+from google.adk.tools.mcp_tool import McpToolset, StreamableHTTPConnectionParams
+MCP_URL = "https://mcp-x-123.us-central1.run.app"
+def run_invoker_headers(ctx):                       # ReadonlyContext -> headers
+    tok = google.oauth2.id_token.fetch_id_token(google.auth.transport.requests.Request(), MCP_URL)
+    return {"X-Serverless-Authorization": f"Bearer {tok}"}   # keeps Authorization free for a user token
+tools = McpToolset(connection_params=StreamableHTTPConnectionParams(url=f"{MCP_URL}/mcp"),
+                   header_provider=run_invoker_headers)
+```
+
+The caller's principal needs `roles/run.invoker`. The `aud` must be the `run.app` URL or a configured custom audience. A custom domain doesn't work as `aud`, and a traffic-tag URL still uses the base service URL. On Cloud Run with **agent identity**, identity certificates are on by default, and Python `google-auth` then requests a **bound** ID token. Call the target's `*.mtls.run.app` URL while presenting `/var/run/secrets/workload-spiffe-credentials/certificates.pem` + `private_key.pem`, or opt out with `--no-identity-certificate`. Whether Agent Runtime's agent identity can mint ID tokens for arbitrary audiences through `fetch_id_token` is unverified. If it can't, use the SA-based runtime or Cloud Run for that caller.
+
+**3. Custom `FunctionTool` with `request_credential` (self-managed tokens)**
+
+```python
+from google.adk.auth import AuthConfig
+from google.adk.tools import ToolContext
+def list_events(day: str, tool_context: ToolContext) -> dict:
+    cfg = AuthConfig(auth_scheme=scheme, raw_auth_credential=cred)
+    tokens = tool_context.state.get("user:cal_tokens")            # 1. cached (per user)
+    if not tokens:
+        exchanged = tool_context.get_auth_response(cfg)           # 2. just came back from consent?
+        if not exchanged:
+            tool_context.request_credential(cfg)                  # 3. emits adk_request_credential
+            return {"status": "pending", "message": "Awaiting user authorization."}
+        tokens = {"access_token": exchanged.oauth2.access_token,
+                  "refresh_token": exchanged.oauth2.refresh_token}
+        tool_context.state["user:cal_tokens"] = tokens            # 4. cache (see secret-handling caveat)
+    # 5. call API; on 401/invalid_grant -> pop cache and request_credential again
+```
+
+**4. Agent Identity auth manager (Preview, `pip install "google-adk[agent-identity]"`)**
+
+```python
+from google.adk.auth.credential_manager import CredentialManager
+from google.adk.integrations.agent_identity import GcpAuthProvider, GcpAuthProviderScheme
+from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
+from google.adk.auth.auth_tool import AuthConfig
+from google.adk.tools.mcp_tool import McpToolset, StreamableHTTPConnectionParams
+from vertexai.agent_engines import AdkApp
+
+jira = McpToolset(connection_params=StreamableHTTPConnectionParams(url="https://mcp.jira.example"),
+    auth_scheme=GcpAuthProviderScheme(
+        name="projects/P/locations/us-central1/authProviders/jira-3lo",   # v1 API: .../connectors/...
+        continue_uri="https://app.example.com/validateUserId"))           # 3LO only; optional if default set
+
+async def spotify_search(credential, query: str):   # AuthenticatedFunctionTool injects AuthCredential
+    token = credential.http.credentials.token        # 2LO / API key / 3LO token from the vault
+    ...
+search = AuthenticatedFunctionTool(func=spotify_search, auth_config=AuthConfig(
+    auth_scheme=GcpAuthProviderScheme(name="projects/P/locations/us-central1/authProviders/spotify")))
+
+class AuthenticatedAdkApp(AdkApp):                    # Python SDK deploy: register in set_up(),
+    def set_up(self):                                 # not at import time, or you get
+        CredentialManager.register_auth_provider(GcpAuthProvider())   # "No auth provider registered
+        super().set_up()                              #  for custom auth scheme 'gcpAuthProviderScheme'"
+# Local adk web / agents-cli deploy: module-level CredentialManager.register_auth_provider(GcpAuthProvider()) works.
+# No scheme in code at all: AgentRegistry(project_id, location).get_mcp_toolset(mcp_server_name=..., continue_uri=...)
+# resolves the auth provider from an Agent Registry binding (same region; auth providers are NOT in "global").
+```
+
+Deploy requirements from the docs: `"google-adk[agent-identity,mcp]>=2.7.1"` and `identity_type=AGENT_IDENTITY`.
+
+#### Token binding, secrets, least privilege, lifetime
+
+- **Token binding.** CAA is on by default for agent identities:
+  - Calls to Google APIs use mTLS with the auto-rotated 24 h X.509 cert.
+  - Beyond Agent Gateway, **DPoP** binds the token.
+  - A token copied into a raw header, or shared with another process, fails with **401 UNAUTHENTICATED**.
+  - The only escape hatch is `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`, which is **not recommended**. The exam answer is almost never "disable CAA".
+- **Where secrets live (best → worst):**
+  1. **Auth manager.** Vault + broker + refresh + revocation + audit, accessed with the agent's SPIFFE ID.
+  2. **Secret Manager.** On Agent Runtime, use `secret_env`/`env_vars={"X": {"secret": ID, "version": V}}`. The secret must be in the **same project**. With agent identity, grant `roles/secretmanager.secretAccessor` to the **Agent Platform Service Agent** `service-NUM@gcp-sa-aiplatform.iam.gserviceaccount.com`, because it fetches secrets at deploy time. On Cloud Run, use `--update-secrets`.
+  3. **Local `.env`.** Dev only, git-ignored.
+  4. **`InMemorySessionService` state.** Dev only.
+- **Never put secrets in** prompts or system instructions, model-visible tool arguments, SGP natural-language constraints (they can be quoted back to users), or logs.
+- **Session state is persisted** by `DatabaseSessionService`/`VertexAiSessionService`. The ADK docs warn that refresh tokens in session state are risky, so keep only short-lived tokens there.
+- **BigQuery analytics plugin redaction.** It redacts only `temp:` keys and a fixed list of key names. There is **no** special `secret:` prefix, and camelCase `clientSecret`/`accessToken` in `adk_request_credential` args can leak.
+- **Least privilege:**
+  - Grant resource-level roles (dataset, bucket, secret), not project-wide `Editor`.
+  - For Google MCP, grant `roles/mcp.toolUser` plus the narrow product role, and add a deny policy on read-write tools for production projects.
+  - Put baselines on the `principalSet`, and sensitive grants on the single `principal://`.
+  - Add PAB to cap eligibility.
+- **Scopes:**
+  - Request the narrowest OAuth scope (e.g. `run.readonly`, `drive.readonly`, `bigquery`), not `cloud-platform`, for user delegation.
+  - In the auth manager, GitHub and Microsoft support a **single scope** only.
+  - ServiceNow grants only the scopes configured on its app, and a mismatch causes a consent loop.
+- **Lifetime and refresh:**
+  - Google access and ID tokens last about 1 h. Client libraries and the metadata server refresh them, so don't cache ID tokens past `exp`.
+  - Auth manager refreshes 3LO tokens silently.
+  - Native ADK requires you to refresh (`creds.refresh(Request())`) and, on `invalid_grant`, clear the cache and call `request_credential` again.
+  - Google refresh tokens require `access_type=offline` (plus `prompt=consent` to reliably re-issue one).
+  - Google refresh tokens for apps in "Testing" publishing status expire after 7 days (unverified here; Google OAuth policy).
+
+#### Common failures and fixes
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| **401** from Google API, "Request had invalid authentication credentials" / CAA not met | Agent's cert-bound token replayed outside the runtime (manual header injection, token shared) | Let client libraries make the call (ADC). Opting out of CAA is a last resort |
+| **403** `agentidentity.authProviders.retrieveCredentials` denied | Principal lacks `roles/agentidentity.user` **on the auth provider** | Grant it to the agent's `principal://` (deployed) or to `user:you@` (local `adk web`) |
+| `No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'` | Registered at import time, then deployed with the Python SDK (serialized app) | Register in `set_up()` of an `AdkApp` subclass |
+| `Location of auth provider does not match location of binding` | Registry client/binding in `global` | Use one region for auth provider, MCP server, and registry client. Bindings aren't supported in `us`/`eu` multi-regions either |
+| `redirect_uri_mismatch` at the SaaS | Registered your app URL (or a wrong one) instead of the auth-manager callback | Register `.../authProviders/NAME/oauthcallback` exactly (see `gcloud ... describe`). Your URL is `continue_uri` |
+| Consent loop / token rejected | ServiceNow app lacks the scope; GitHub/Microsoft asked for >1 scope | Align scopes with the app config. Use a single scope |
+| Consent never completes (auth manager) | `continue_uri` handler doesn't POST `credentials:finalize`, or the nonce/user mismatch | Store `consent_nonce` + `user_id` per session and match on `uuid` for concurrent flows |
+| Cloud Run **401** | No token, **access token instead of ID token**, or wrong `aud` (custom domain, tag URL) | Mint an ID token with `aud` = `run.app` URL (or configure a custom audience) |
+| Cloud Run **403** | Caller principal lacks `roles/run.invoker`. For GE → A2A: the **Discovery Engine service agent** lacks it | Grant `run.invoker` to the right principal (agent identity, SA, or `service-NUM@gcp-sa-discoveryengine...`) |
+| App's own JWT check breaks after enabling Cloud Run IAM | Both IAM and the app want `Authorization` | Send the IAM ID token in `X-Serverless-Authorization`. If both headers are present, Cloud Run checks only that one and strips its signature before the container |
+| Google remote MCP **403** | Missing `roles/mcp.toolUser`, product role, MCP endpoint not enabled, or a read-only deny policy | Grant the roles, enable the MCP server, and check deny policies (`tools/list` still shows write tools) |
+| API key rejected by a Google MCP server | Server requires an IAM principal | Use ADC/OAuth. API keys work only for non-IAM services (e.g. Maps) |
+| `API_KEY_SERVICE_BLOCKED` / `API_KEY_INVALID` | API not enabled, or key restrictions / whitespace | Enable the API, fix the key's API restrictions, re-copy the key |
+| Third-party MCP client can't log in to Google MCP | Client relies on **Dynamic Client Registration / CIMD** | Not supported. Pre-create an OAuth client ID/secret |
+| `invalid_grant` / 401 after days of working | Refresh token expired or revoked; consent withdrawn | Clear cached tokens and re-trigger consent (the auth manager re-prompts) |
+| 403s right after redeploy, or after Cloud Run SA → agent-identity switch | New principal, old grants don't apply | `principalSet` baselines, re-bind from `effectiveIdentity`, deploy `--no-traffic` first on Cloud Run |
+| Agent Runtime deploy fails reading a secret | Agent Platform Service Agent lacks `secretAccessor`, or the secret is in another project | Grant it, and keep secrets in the agent's project |
+
+#### Exam signals (auth-specific)
+
+| Scenario says... | Pick |
+|---|---|
+| "agent calls BigQuery/GCS as itself, no keys" | **Agent Identity + ADC**, role on the resource |
+| "agent on **GKE** needs Google APIs" | **Workload Identity Federation for GKE** (Agent Identity is only on Agent Runtime, GE, and Cloud Run) |
+| "custom MCP server on Cloud Run, only our agents may call it" | `--no-allow-unauthenticated` + **`run.invoker`** to the agent principal + **ID token** with `aud` = URL |
+| "developers' CLI/IDE must reach private Cloud Run MCP with OAuth login" | **IAP on Cloud Run** (`--iap`, `iap.httpsResourceAccessor`, custom OAuth client for programmatic access) or `gcloud run services proxy` |
+| "app already uses the Authorization header" | **`X-Serverless-Authorization`** for the IAM token |
+| "use Google's BigQuery/Cloud Run MCP server" | ADC/OAuth + **`roles/mcp.toolUser`** + product role. No API keys, no DCR |
+| "block write MCP tools org-wide without a gateway" | **IAM deny** on `mcp.googleapis.com/tools.call` with `tool.isReadOnly == false` |
+| "nightly job, SaaS supports OAuth, no user" | **2LO** auth provider |
+| "SaaS only offers a static key" | **API-key auth provider** (not env vars, not code) |
+| "as the signed-in user, their permissions, consent" | **3LO** auth provider (custom app) / **GE authorization resource + `toolAuthorizations`** (GE-hosted) |
+| "agent must never see the user's raw credential" | Auth manager + **Agent Gateway** with GE (credential decrypted at the gateway) |
+| "no auth code in code, bind provider declaratively" | **Agent Registry binding** + `registry.get_mcp_toolset(...)` |
+| "orchestrator → sub-agent on Agent Runtime" | Roles on the **parent agent's identity** (`aiplatform.user` on the target engine, `agentregistry.viewer`) + gateway Access policy |
+| "public A2A agent, callers need to know how to authenticate" | Declare **`securitySchemes` + `security`** in the agent card |
+| "multi-tenant MCP, per-user JWT forwarded" | `McpToolset(header_provider=...)` |
+| "private Cloud Run API from an OpenAPI tool" | `ServiceAccount(use_default_credential=True, use_id_token=True, audience=URL)` |
+
+**Distractors to reject:**
+- "Store the SaaS key in an environment variable / the system prompt / session state." Use the auth manager, or Secret Manager at minimum.
+- "Use a service-account key file for the GKE/Cloud Run agent." Use WIF or the metadata server. Keys are the last resort for off-cloud callers with no WIF.
+- "Grant the **user** `run.invoker` / `aiplatform.user` so the A2A call works." The **calling agent's** principal needs it.
+- "Send the Google access token to the private Cloud Run MCP server." It needs an **ID token** with the right `aud`.
+- "Set `--allow-unauthenticated` and rely on the MCP server's obscurity." Only acceptable for a genuinely public A2A/MCP endpoint that declares and enforces its own `securitySchemes`.
+- "Register `continue_uri` as the OAuth redirect URI." Register the **auth-manager `oauthcallback`** URL.
+- "Use 2LO so actions are attributed to each user." 2LO is the agent's authority. Use 3LO.
+- "Disable CAA to fix a 401." Fix how the token is used instead.
+- "Grant the agent `roles/agentidentity.user` on the whole project." The documented pattern grants it **on the specific auth provider** resource, which is least privilege: one agent, one provider.
+
 ---
 
 ### 5.1.2 Principal Access Boundary (PAB) with Agent Identity
@@ -2570,7 +3702,7 @@ Rule of thumb:
 - **Data-exfiltration perimeter → VPC-SC.**
 - **Agent-to-tool traffic at the L7/MCP level (tool name, read-only hint, host/path/method) → Agent Gateway Access policy.**
 
-IAM allow/deny can't see MCP tool names, and Access policies can't protect a BigQuery dataset from a direct API call that bypasses the gateway. That is why you layer them.
+IAM allow/deny can't see tool names on **your own** MCP servers. For Google Cloud remote MCP servers, only IAM **deny** conditions on `mcp.tools.call` can use `tool.isReadOnly`/`tool.name` (see 5.1.1b). Access policies can't protect a BigQuery dataset from a direct API call that bypasses the gateway. That is why you layer them.
 
 ---
 
@@ -2685,7 +3817,7 @@ gcloud iam access-policies create agent-egress --details-rules=policy.json --pro
 ### 5.1.4 Agentic governance and policy enforcement: Agent Registry and Model Armor
 
 #### Agent Registry
-- **What it is:** the central catalog of **agents, MCP servers, endpoints, and skills (Preview)**. You can search it by keyword, prefix, or semantics. Agent Runtime and Gemini Enterprise agents are **auto-registered**. Custom agents on Cloud Run or GKE are registered manually. Registries can be global, multi-regional, or regional.
+- **What it is:** the central catalog of **agents, MCP servers, endpoints, and skills (Preview)**. Agents and MCP servers are searchable by keyword or prefix (semantic search exists only for skills). **Auto-registration** (same project only) covers Agent Runtime and Gemini Enterprise agents, Google remote MCP servers, Cloud Run services deployed with `--functional-type=agent|mcp-server`, and GKE workloads labelled `registry.gke.io/functional-type`. Everything else, including cross-project entries, is registered manually (see §3.2.4). Registries can be global, multi-regional, or regional.
 - **Governance role:** the gateway's allowlist, since unregistered destinations are denied unless a policy names them by host. Registry entries are also the targets of Access policies (`--agent`, `--endpoint`, `--mcp-server`), Semantic Governance policies, and auth-provider **bindings**.
 - **IAM roles:** `roles/agentregistry.viewer` (discover), `.editor`, and `.admin` (bindings). For **A2A delegation**, the *parent agent's identity* (not your user) needs `roles/agentregistry.viewer` to resolve the sub-agent and `roles/aiplatform.user` on the sub-agent's reasoning engine.
 - **Composite Google APIs endpoint:** register several core Google API hostnames in a single registry entry, which suits multi-project setups.
@@ -2747,7 +3879,7 @@ The ADK safety guidance lists these layers: identity and authorization, in-tool 
 | **Callbacks** (`before_model_callback`, `after_model_callback`, `before_tool_callback`, `after_tool_callback`, `before/after_agent_callback`) | Agent code | Yes, unless the callback calls an LLM | Arg validation against session state (e.g. `user_id` must match the session), table allowlists, PII scrub, tool-output screening | Per-agent code to maintain. Return an `LlmResponse` from `before_model` to skip the model; return a `dict` from `before_tool` to skip the tool |
 | **Plugins** (`BasePlugin` on the `App`/`Runner`) | Runner-global | Yes | Same hooks, applied **to every agent, tool, and model call** in the app. Plugin callbacks run **before** agent-level callbacks (verify precedence in ADK docs). ModelArmorPlugin, ATR guardrail plugin | Global scope means a bug hurts everything |
 | **In-tool guardrails** | Tool | Yes | The policy lives in developer-set `ToolContext`/state (e.g. `select_only`, allowed tables), which the model can't change | Must be designed into each tool |
-| **LLM-as-judge** (Gemini Flash-Lite in a callback) | Agent code | No | Novel or semantic attacks (e.g. "sympathy" social engineering that got past Model Armor in TechTrapture's ADK security demos), off-topic or brand risk | Extra latency and tokens. The judge itself can be injected |
+| **LLM-as-judge** (Gemini Flash-Lite in a callback) | Agent code | No | Novel or semantic attacks (e.g. "sympathy" social engineering that can get past Model Armor's prompt-injection filter), off-topic or brand risk | Extra latency and tokens. The judge itself can be injected |
 | **Semantic Governance** | Gateway | No (managed LLM judge) | Tool call vs user intent and business rules, **without redeploying code** | Latency. Rationale leakage |
 | **HITL** | Workflow | Human | Irreversible or high-value actions | Throughput and latency. Needs a UI and resumable state |
 | **Sandboxed code exec** | Runtime | Yes | Model-generated code escaping (Agent Platform sandbox, GKE Sandbox, Cloud Workstations) | — |
@@ -2962,6 +4094,62 @@ C. Disable IAP on the gateway
 D. Use an API key between agents
 **Answer: A.** Permissions must go to the calling agent's principal, not the user's. Gateway egress is default-deny, so an explicit agent-to-agent allow rule is also needed.
 
+**13.** An ADK agent on Agent Runtime (Agent Identity enabled) calls a custom MCP server deployed to Cloud Run with `--no-allow-unauthenticated`. Every tool call fails with 403. The agent sends an ID token whose audience is the service's `run.app` URL. What is the most likely fix?
+A. Redeploy the MCP server with `--allow-unauthenticated`
+B. Grant `roles/mcp.toolUser` to the agent on the project
+C. Grant `roles/run.invoker` on the MCP service to the agent's `principal://agents.global.org-…/reasoningEngines/ID`
+D. Store an API key for the MCP server in Secret Manager
+**Answer: C.** The token is valid and the audience is right, so the failure is authorization. Cloud Run checks `run.invoker` for the caller's principal. `mcp.toolUser` (B) governs Google's remote MCP servers, not your own. A removes authentication entirely, and D adds a secret that Cloud Run IAM ignores.
+
+**14.** A Cloud Run-hosted A2A agent validates end-user OAuth tokens in the `Authorization` header. The team now wants Cloud Run IAM to also verify that only the Gemini Enterprise service agent can invoke it. How should the IAM token be sent?
+A. In `X-Serverless-Authorization`, with `roles/run.invoker` granted to `service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com`
+B. Concatenated with the user token in `Authorization`
+C. As a query parameter
+D. Replace the user token with the service agent's access token
+**Answer: A.** Cloud Run checks only `X-Serverless-Authorization` when both headers are present, and forwards `Authorization` untouched. Gemini Enterprise does exactly this: a service-agent OIDC token plus the user token. D loses user delegation.
+
+**15.** An agent using the Agent Identity auth manager works in `adk web` but, once deployed to Agent Runtime with the Vertex AI Python SDK, fails at query time with "No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'". What fixes it?
+A. Grant `roles/agentidentity.admin` to the agent
+B. Call `CredentialManager.register_auth_provider(GcpAuthProvider())` inside `set_up()` of an `AdkApp` subclass
+C. Move the auth provider to the `global` location
+D. Recreate the provider with the legacy `connectors` API
+**Answer: B.** The SDK serializes the app, so module-level registration doesn't run in the container. `set_up()` runs at container start. C is wrong because auth providers aren't available in `global`.
+
+**16.** A platform team lets many agents use Google's remote BigQuery MCP server. Security requires that no agent in the org can ever call a tool that modifies data, regardless of granted roles, and there is no Agent Gateway yet. What should you implement?
+A. Remove write tools from each agent's instructions
+B. An org-level IAM deny policy on `mcp.googleapis.com/tools.call` with the condition `api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == false`
+C. A PAB policy limiting agents to read-only datasets
+D. A Model Armor floor setting for `GOOGLE_MCP_SERVER`
+**Answer: B.** IAM deny policies support MCP attributes (`tool.isReadOnly`, `tool.name`) for the `mcp.tools.call` permission on Google Cloud MCP servers. PAB (C) limits resources, not tool types. Model Armor (D) screens content, and A isn't enforcement. `tools/list` still shows the write tools, but calls to them fail.
+
+**17.** A nightly reconciliation agent pulls opportunities from Salesforce. No user is present, Salesforce supports OAuth client credentials, and security forbids secrets in code or environment variables. What is the recommended approach?
+A. 3-legged OAuth auth provider, with a service user logged in once
+B. 2-legged OAuth auth provider in the auth manager, `roles/agentidentity.user` on it for the agent, referenced with `GcpAuthProviderScheme`
+C. Salesforce password in Secret Manager
+D. Grant the agent identity a Salesforce role in IAM
+**Answer: B.** 2LO is the documented choice for M2M with OAuth-capable services. The vault holds the client secret and ADK injects the tokens. A needs a consenting user, C is basic auth (not recommended), and D doesn't apply because Salesforce isn't governed by Google IAM.
+
+**18.** An ADK agent registered in Gemini Enterprise must query BigQuery **as the signed-in employee**, so that dataset ACLs apply per user. What completes the design?
+A. Grant the agent identity `bigquery.dataViewer` on all datasets
+B. Create an OAuth web client with the Gemini Enterprise redirect URIs, create an authorization resource (`serverSideOauth2`), reference it in `authorizationConfig.toolAuthorizations`, and read the token in the agent through `external_access_token_key="AUTH_ID"`
+C. Use Workload Identity Federation
+D. Pass the user's password to the agent through session state
+**Answer: B.** GE runs consent and hands the user token to the agent, so BigQuery enforces that user's IAM. A acts as the agent and removes per-user enforcement, which is the confused-deputy risk. The GE authorization URI should include `access_type=offline` and `prompt=consent`.
+
+**19.** A company runs its agents on GKE Autopilot and wants each agent to call Vertex AI and Cloud Storage without any key files and with per-workload least privilege. What should they use?
+A. Agent Identity with `identity_type=AGENT_IDENTITY`
+B. A service-account JSON key mounted as a Kubernetes Secret
+C. Workload Identity Federation for GKE, granting roles to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA`
+D. The node's default Compute Engine service account
+**Answer: C.** Agent Identity is supported on Agent Runtime, Gemini Enterprise, and Cloud Run, not GKE. WIF for GKE gives keyless, per-KSA principals. B and D are key-based or over-shared.
+
+**20.** A 3LO GitHub integration through the auth manager fails at the GitHub step with `redirect_uri_mismatch`. The team registered `https://app.example.com/validateUserId` as the callback in the GitHub OAuth app. What is wrong?
+A. GitHub needs multiple scopes
+B. The GitHub OAuth app must register the auth manager's callback `https://agentidentitycredentials.googleapis.com/v1/projects/P/locations/L/authProviders/NAME/oauthcallback`. `validateUserId` is the `continue_uri` that the user reaches afterwards
+C. The agent lacks `roles/run.invoker`
+D. CAA blocked the redirect
+**Answer: B.** The auth manager receives the code at its `oauthcallback` and then sends the user to your `continue_uri`, where you call `credentials:finalize`. Note also that GitHub supports only a single scope in the auth manager, which makes A the opposite of the fix.
+
 ---
 
 ### Key doc links
@@ -2997,6 +4185,19 @@ D. Use an API key between agents
 - Gemini safety filters: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/configure-safety-filters
 - Register ADK agent in Gemini Enterprise (authorizations): https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-adk-agent
 - Register A2A agent in Gemini Enterprise (auth headers): https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-a2a-agent
+- Auth manager troubleshooting: https://docs.cloud.google.com/iam/docs/troubleshoot-auth-manager
+- Manage auth providers (edit/disable/delete): https://docs.cloud.google.com/iam/docs/manage-auth-providers-v2
+- Authenticate with an agent's own authority: https://docs.cloud.google.com/iam/docs/auth-agent-own-identity
+- Agent Registry authenticate toolsets / bindings: https://docs.cloud.google.com/agent-registry/authenticate-toolsets , https://docs.cloud.google.com/agent-registry/manage-bindings
+- Authenticate to Google MCP servers / set up auth: https://docs.cloud.google.com/mcp/authenticate-mcp , https://docs.cloud.google.com/mcp/set-up-authentication-mcp-servers
+- Prevent read-write MCP tool use (IAM deny attributes): https://docs.cloud.google.com/mcp/prevent-read-write-tool-use
+- Cloud Run agents (agent identity, ID tokens, bound tokens): https://docs.cloud.google.com/run/docs/ai/authenticate-agents , https://docs.cloud.google.com/run/docs/ai/agent-platform-features
+- Cloud Run MCP servers (hosting, IAP): https://docs.cloud.google.com/run/docs/host-mcp-servers , https://docs.cloud.google.com/run/docs/ai/authenticate-mcp-servers
+- Cloud Run service-to-service (ID token, X-Serverless-Authorization): https://docs.cloud.google.com/run/docs/authenticating/service-to-service
+- Deploy A2A agents to Cloud Run (securitySchemes): https://docs.cloud.google.com/run/docs/deploy-a2a-agents
+- Workload Identity Federation for GKE: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
+- Agent Runtime deploy (env vars / Secret Manager secrets): https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/deploy-an-agent
+- IAP programmatic authentication: https://docs.cloud.google.com/iap/docs/authentication-howto
 
 
 ---
@@ -3115,6 +4316,49 @@ Production drift ...................... online monitors → Cloud Monitoring ale
 10. Agent Registry URNs are **inventory identifiers**, IAM bindings use the **agent principal**.
 11. VPC-SC: Agent Runtime project must be **in the perimeter before deploy**; Agent Gateway/IAM agent policies have limited VPC-SC support.
 12. Changing GE identity provider ⇒ **recreate ingested data stores**, users lose chat history.
+
+### 6.5 Heavily tested — quick recall
+
+**Antigravity customization** (full detail: §2.2.b)
+```
+Workspace  .agents/rules/*.md · .agents/skills/<name>/SKILL.md · .agents/hooks.json · .agents/mcp_config.json · .agents/agents/*.md
+Global     ~/.gemini/config/{rules,skills,hooks.json,mcp_config.json}   (CLI skills: ~/.gemini/antigravity-cli/skills/)
+Rule trigger   always_on | model_decision (needs description) | glob (needs globs) | manual (@-mention)   — camelCase = silently dropped
+Rule limits    24 KB/file · 20k-token budget for global + always_on rules · rules/ scanned flat (nested → rules.json)
+Hook events    PreToolUse · PostToolUse (matcher = tool-name regex) · PreInvocation · PostInvocation · Stop
+Hook gate      PreToolUse deny = block · PostToolUse can't block · Stop → decision "continue" = "don't finish until green"
+Hook timeout   seconds (default 30)  ≠ Gemini CLI milliseconds
+Skill          only description required · progressive disclosure: metadata → SKILL.md body → scripts/references on demand
+Workflows      deprecated → skills (/migrate-workflows), retired 2026-11-01
+Enforce/block → hook · convention → rule · procedure + scripts → skill · separate context → subagent · ship to devs → plugin
+```
+
+**Agent Registry — MCP servers** (full detail: §3.2.4)
+```
+Enable        gcloud services enable agentregistry.googleapis.com   (also turns on its own MCP server)
+Auto (same project only)  Google remote MCP servers (global, on API enable) · Cloud Run --functional-type=mcp-server
+                          · GKE label registry.gke.io/functional-type: MCP_SERVER · Agent Runtime / Gemini Enterprise agents
+Manual        gcloud agent-registry services create NAME --location=L --mcp-server-spec-type=tool-spec
+                --mcp-server-spec-content=@toolspec.json --interfaces=url=URL,protocolBinding=jsonrpc
+              tool spec = tools/list shape · ≤10 KB · ≤100 tools · never re-scanned → update the spec yourself
+Write via Service, read via McpServer/Agent/Endpoint views · search = keyword/prefix (semantic = skills only)
+Bind auth     gcloud agent-registry bindings create … --auth-provider=…   (needs roles/agentregistry.admin)
+Govern        Agent Gateway only reaches REGISTERED destinations · CEL on mcp.tool.isReadOnly · roles/iap.egressor
+Traps         us/eu multi-regions: no manual registration or bindings · URN ≠ IAM principal · don't give agents editor/admin
+ADK           AgentRegistry(project, location).get_mcp_toolset(name, continue_uri=…) · get_remote_a2a_agent(…)
+```
+
+**Agent-to-tool auth** (full detail: §5.1.1b)
+```
+Google APIs / remote MCP   Agent Identity (ADC) + product role + roles/mcp.toolUser
+Custom MCP on Cloud Run    ID token, aud = run.app URL · roles/run.invoker · X-Serverless-Authorization wins if both headers
+3rd-party API key / 2LO    Auth Manager auth provider (vault) — never in prompt/state/code
+Act as the user (3LO)      Auth Manager OAuth delegation · consent · redirect = …/authProviders/NAME/oauthcallback · continue_uri = back to your app
+Gemini Enterprise agents   authorization resource → toolAuthorizations · user token via external_access_token_key
+GKE self-hosted            Workload Identity Federation (Agent Identity not on GKE)
+Grant                      roles/agentidentity.user on the auth provider · register provider in set_up() when deploying
+Tokens                     CAA mTLS + DPoP binding → stolen token useless outside runtime
+```
 
 ### 6.4 Items flagged unverified by research (don't over-invest)
 

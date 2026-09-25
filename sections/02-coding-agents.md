@@ -271,7 +271,7 @@ spec:
 - **`/boost`** is a three-tier multi-agent orchestrator (Orchestrator → DeepCoder / DeepInvestigator → workers) for hard concurrency bugs and non-trivial refactors, with independent verification loops. It requires a paid tier.
 - **`/teamwork-preview`** coordinates multiple agents for large multi-file projects, with milestone decomposition and verification.
 - **Recovery:** `/rewind` (`/undo`), `/fork`, `/resume`, and `Esc` to interrupt a turn.
-- **Deterministic quality gates:** a `PostToolUse` hook on `write_to_file`/`replace_file_content` runs a linter or formatter. A `PreToolUse` hook on `run_command` can `deny`. A `PostInvocation` hook can `force_continue` until tests pass (a verification-loop pattern).
+- **Deterministic quality gates:** a `PostToolUse` hook on `write_to_file`/`replace_file_content` runs a linter or formatter. A `PreToolUse` hook on `run_command` can `deny`. A `Stop` hook returning `decision: "continue"` keeps the agent working until tests pass — the "don't finish until green" gate (see 2.2.b). `PostInvocation` + `force_continue` also works but fires after every model call.
 - **Evidence from tools via MCP:**
   - SonarQube, Wiz, CrowdStrike and Splunk MCP servers for security findings.
   - Chrome DevTools MCP for front-end performance traces.
@@ -286,7 +286,7 @@ spec:
 - **LLM patching without exploit validation** is fast but risks false positives. CodeMender-style validation costs compute but removes alert fatigue.
 
 **Exam signals**
-- "Ensure every edit is linted/tests pass before the agent continues": **hooks** (`PostToolUse` / `PostInvocation`). Rules alone don't enforce anything.
+- "Ensure every edit is linted/tests pass before the agent continues": **hooks** (`PostToolUse` for per-edit lint, `Stop` → `continue` for the tests-green gate). Rules alone don't enforce anything.
 - "Large refactor across 40 services without agents stepping on each other": subagents with `branch` (worktree) isolation, or `/teamwork-preview`.
 - "Prioritize only exploitable vulnerabilities and auto-generate verified fixes": **CodeMender**.
 - "Human must approve the approach before files change": Planning Mode + Request Review.
@@ -390,7 +390,347 @@ globs: "*.proto, **/*.pb.go"                        # required for glob
 - "Rule isn't being applied" usually means missing frontmatter, a camelCase trigger, or a nested folder not listed in `rules.json`.
 - "Rules suddenly partially ignored in a large monorepo" means the 20k-token budget demoted them to pointers.
 
-#### 2.2.b Augmenting Antigravity with Agents CLI (build, scale, govern, optimize deployed agents)
+#### 2.2.b Deep dive — Antigravity rules, hooks and skills: paths, formats, when to use which
+
+> 📊 **Infographic:** Antigravity customization map
+>
+> [![Antigravity customization map](../infographics/16-antigravity-customization.png)](../infographics/16-antigravity-customization.png)
+
+This subsection goes one level deeper than 2.2.a. It covers exact paths, file formats, activation semantics and the hook I/O contract, because exam questions often turn on one path or one field value. Everything below comes from the antigravity.google docs (rules, skills, hooks, subagents, plugins, MCP, permissions, CLI settings, workflows migration, Gemini CLI migration) unless it is marked **(unverified)**.
+
+**Surface availability (a detail that can decide a question)**
+
+| Feature | Antigravity 2.0 (app) | Antigravity CLI (`agy`) | Antigravity IDE |
+|---|---|---|---|
+| Rules, skills, hooks, MCP, plugins | Yes | Yes | Yes |
+| Custom subagents (`.agents/agents/`) | Yes | Yes | Not listed on the subagents page |
+| New permission engine (`action(target)`) | Yes (macOS/Linux) | Yes | Not listed on the permissions page |
+| `/migrate-workflows` | Yes (the docs say "Open Antigravity 2.0") | — | Workflows originated here |
+
+**1. File-system map**
+
+Workspace scope. Commit it to the repo and the whole team shares it.
+
+```text
+<repo>/
+├── AGENTS.md                  # rule, no frontmatter, always on (directory scope)
+├── GEMINI.md                  # same semantics as AGENTS.md
+├── .agents/                   # default customization dir (legacy .agent/ still read)
+│   ├── AGENTS.md | GEMINI.md  # also discovered here
+│   ├── rules/                 # FLAT scan: only immediate *.md children
+│   │   ├── typescript.md      # YAML frontmatter with `trigger:` REQUIRED
+│   │   └── frontend/react.md  # IGNORED unless listed in rules.json
+│   ├── rules.json             # inherits / entries / include_only / exclude
+│   ├── skills/
+│   │   └── <skill-name>/
+│   │       ├── SKILL.md       # required (frontmatter: description required)
+│   │       ├── scripts/       # optional executables
+│   │       ├── references/    # optional docs (Antigravity docs also show examples/)
+│   │       └── assets/        # optional templates/data (Antigravity docs: resources/)
+│   ├── hooks.json             # workspace hooks
+│   ├── agents/
+│   │   ├── <name>.md          # custom subagent (frontmatter + system prompt)
+│   │   └── <name>/agent.md    # folder form (what the CLI /agents panel suggests)
+│   ├── plugins/
+│   │   └── <plugin>/plugin.json …
+│   ├── mcp_config.json        # workspace MCP servers (also auto-discovered by the SDK)
+│   └── workflows/<name>.md    # LEGACY: deprecated, retired 2026-11-01
+└── services/payments/
+    ├── AGENTS.md              # directory-scoped rule, loaded when the agent touches files here
+    └── .agents/rules/*.md     # directory-scoped modular rules
+```
+
+Global (user) scope. It applies to every workspace on the machine. The shared home `~/.gemini/config/` is used by all three surfaces. The CLI adds its own home.
+
+```text
+~/.gemini/
+├── AGENTS.md | GEMINI.md          # global always-on rules (no frontmatter)
+├── config/                        # shared by 2.0, CLI and IDE
+│   ├── AGENTS.md | GEMINI.md      # also global always-on
+│   ├── rules/*.md                 # modular global rules (frontmatter required)
+│   ├── skills/<name>/SKILL.md     # global skills: 2.0 + IDE (CLI uses its own path, below)
+│   ├── hooks.json                 # global hooks (all surfaces)
+│   ├── agents/<name>.md | <name>/agent.md   # global subagents
+│   ├── plugins/<plugin>/          # global plugins: 2.0 + IDE (manual drop-in)
+│   ├── mcp_config.json            # global MCP servers (all surfaces)
+│   └── workflows/<name>.md        # LEGACY global workflows
+├── antigravity-cli/               # CLI home = CLI <app_data_dir>
+│   ├── settings.json              # permissions{allow,deny,ask}, toolPermission,
+│   │                              #   enableTerminalSandbox, hooks (also allowed here) …
+│   ├── keybindings.json
+│   ├── rules/*.md                 # extra global rules (CLI only)
+│   ├── skills/<name>/SKILL.md     # global skills for the CLI
+│   ├── plugins/<plugin>/          # where `agy plugin install` stages plugins
+│   │   └── rules/ skills/ agents/ hooks.json mcp_config.json
+│   └── brain/<conversationId>/.system_generated/logs/transcript.jsonl
+├── antigravity/                   # 2.0 <app_data_dir>
+│   ├── mcp_oauth_tokens.json      # MCP OAuth tokens
+│   ├── skills/                    # LEGACY global skills (IDE still reads it)
+│   └── brain/<conversationId>/…   # transcripts + artifacts
+└── antigravity-ide/               # IDE <app_data_dir> (transcripts)
+```
+
+Plugin layout. A plugin is the distribution unit, and it has the same shape wherever it is installed.
+
+```text
+<plugin-name>/
+├── plugin.json        # REQUIRED marker/manifest: {"$schema","name","description"}
+├── mcp_config.json    # optional
+├── hooks.json         # optional
+├── skills/<skill>/SKILL.md
+├── agents/<agent>.md
+└── rules/<rule>.md
+```
+- `plugin.json` allows only `name` and `description` (`additionalProperties: false`). `name` matches `^[a-zA-Z0-9-_]+$`. It is **required for the CLI**. In 2.0 and the IDE it defaults to the folder name. `$schema` is `https://antigravity.google/schemas/v1/plugin.json`.
+- **Permissions location.** The CLI keeps them in `~/.gemini/antigravity-cli/settings.json`. Antigravity 2.0 sets them in **Settings → General → Permission Settings**, with per-project overrides under **Settings → Projects**. The backing file path for 2.0 is not documented **(unverified)**. No workspace-level permissions file is documented.
+
+**Precedence and merge rules between scopes**
+
+| Primitive | How scopes combine | Conflict resolution |
+|---|---|---|
+| Rules | **Cumulative.** Global, workspace and directory rules are all combined into the prompt | More specific directory rules win. Documented precedence order: directory-scoped, then global |
+| Skills | Workspace and global are both listed | A skill beats a legacy workflow with the same name. Same-named skills in two scopes: not documented **(unverified)** |
+| Hooks | Workspace, global, CLI `settings.json` and plugin `hooks.json` all load (`/hooks` shows the effective set) | Ordering between multiple matching hooks is not documented **(unverified)** |
+| MCP | Global plus workspace `mcp_config.json` (plus plugin) | Same server name in two scopes: not documented **(unverified)** |
+| Permissions | Preset (Default / Request Review / Turbo), with explicit rules layered on top | **Deny > Ask > Allow**. Explicit rules always beat preset defaults. A subagent inherits its parent's scopes and sandbox |
+
+**2. Rules (in depth)**
+
+- **Two file types:**
+  - `AGENTS.md` / `GEMINI.md` are plain Markdown with **no frontmatter**. They are always on for their directory scope.
+  - `rules/*.md` must **start with YAML frontmatter** that declares a valid `trigger`. A missing frontmatter or an invalid value (`alwaysOn`, `modelDecision`) means the rule is **silently discarded**.
+- **Frontmatter fields:**
+
+| Field | Required | Notes |
+|---|---|---|
+| `trigger` | Yes | `always_on` \| `model_decision` \| `glob` \| `manual` (snake_case, exact) |
+| `description` | Required for `model_decision`, recommended for all | For `model_decision`, it becomes the index entry the model sees. It is also the fallback pointer text when an `always_on` rule is demoted by the budget |
+| `globs` (singular `glob` also accepted) | Required for `glob` | A comma-separated string, e.g. `"*.proto, **/*.pb.go"`. **Quote patterns that start with `*`**, because YAML treats `*` as an alias anchor |
+
+- **Activation modes: what is loaded, and when:**
+
+| `trigger` | Loaded up front | Full body enters context | Best for |
+|---|---|---|---|
+| `always_on` | Full content, **every turn** | Always | Short, universal invariants. The docs prefer putting these in `AGENTS.md` |
+| `model_decision` | Only **path + `description`** (progressive disclosure) | When the agent judges the task matches the description | Long domain guides (migrations, API style) that are only sometimes relevant |
+| `glob` | Nothing until triggered | When the agent **interacts with a file matching `globs`** | Language- or file-type-specific conventions (`*.proto`, `*.tf`) |
+| `manual` | Nothing | **Only when you `@`-mention it in chat** | Release checklists, audit rubrics, one-off playbooks |
+
+- **Nesting and discovery.** When Antigravity reads or edits a file, it walks **up from that file's folder to the workspace root**. At each level it loads `<dir>/AGENTS.md|GEMINI.md`, `<dir>/.agents/AGENTS.md|GEMINI.md`, and `<dir>/.agents/rules/*.md` (legacy `<dir>/.agent/rules/*.md`). A monorepo can therefore give `services/payments/` its own rules, and they appear only when the agent works there.
+- **Flat scan.** `.agents/rules/frontend/react.md` is ignored unless it is registered in `.agents/rules.json`:
+```json
+{ "inherits": [ { "path": "../shared-config/.agents/rules.json" } ],
+  "entries":  [ { "path": "../shared-rules", "exclude": ["deprecated_rules.md", "legacy/"] },
+                { "path": "rules", "include_only": ["frontend/react.md"] } ] }
+```
+  `rules.json` is also the documented way to **share rules across repos** (`inherits`), keeping their frontmatter and triggers intact.
+- **Includes:**
+  - `@[label](path)` **inlines** the target file before prompt evaluation and size checks. The path is relative to the rule file, and `~/` expands to home. Frontmatter in the included file is stripped.
+  - `@path` does **not** inline anything. It rewrites the reference to a canonical absolute workspace path (`@/workspace/path`).
+- **Limits:**
+  - **24,000 bytes per rule file**, measured after includes are expanded. Anything beyond that is truncated.
+  - A **20,000-token aggregate budget** for all active **global + `always_on`** rules. This is separate from the "customization budget" used by skills and MCP. When it is exceeded, the **largest** files are demoted to pointers (`- <path>: <description>`) that the agent reads on demand.
+- **UI.** 2.0: Customizations → **Rules** tab → **+ Global** / **+ Workspace**. IDE: **…** → Customizations → Rules. CLI: edit the files directly.
+- **Example (`.agents/rules/db-migrations.md`):**
+```markdown
+---
+trigger: model_decision
+description: "Apply whenever writing or reviewing database migrations or SQL schema changes."
+---
+# Database migration rules
+1. Never drop or rename a column in one deployment — use expand-and-contract.
+2. Always create indexes on existing PostgreSQL tables with CONCURRENTLY.
+@[Schema conventions](../../docs/schema-conventions.md)
+```
+
+**3. Skills (in depth)**
+
+- **Standard.** Skills follow the open Agent Skills standard (agentskills.io), which Antigravity adopted in May 2026. A skill is a **directory** containing `SKILL.md`.
+- **Frontmatter:**
+
+| Field | Antigravity docs | Open spec (agentskills.io) |
+|---|---|---|
+| `name` | Optional. Lowercase with hyphens. **Defaults to the folder name** | Required. 1–64 chars, `a-z0-9-`, no leading, trailing or double hyphens, **must match the folder name** |
+| `description` | **Required.** It is what the agent sees when deciding. Write it in third person with trigger keywords | Required, 1–1024 chars |
+| `license`, `compatibility` (≤500 chars), `metadata` (string map), `allowed-tools` (experimental) | Not documented by Antigravity | Optional. Whether Antigravity honors `allowed-tools` is **(unverified)** |
+
+  **Portability tip:** always set `name` equal to the folder name. Antigravity doesn't require it, but other skill-compliant tools and Skill Registry validation (≤64 chars, lowercase/hyphen, `description` ≤1024) do.
+- **Progressive disclosure (three layers):**
+  1. **Discovery.** At conversation start, only `name` + `description` for every skill are in context (the spec budgets about 100 tokens per skill).
+  2. **Activation.** When the task matches, the agent reads the whole `SKILL.md` body (the spec recommends under 5,000 tokens and under 500 lines).
+  3. **Resources.** Files in `scripts/`, `references/`, `assets/` (or `examples/`, `resources/`) are read or run **only when the body tells the agent to**. The docs' best practice is to treat scripts as **black boxes**: run `script --help` rather than reading the source, which saves context. Scripts run through the normal `run_command` tool, so they go through **permissions, the terminal sandbox and `PreToolUse` hooks** like any other command.
+- **Invocation:**
+  - **Autonomous:** the model matches on the description.
+  - **Explicit:** `/<skill-name>` in 2.0 and the CLI. The CLI auto-creates a slash command for every skill, and `/skills` lists them. You can also mention the skill by name in the prompt.
+- **Locations:** workspace `.agents/skills/<name>/`. Global `~/.gemini/config/skills/<name>/` (2.0, IDE, plus the legacy `~/.gemini/antigravity/skills/` in the IDE). CLI global `~/.gemini/antigravity-cli/skills/<name>/`. Plugin skills in `<plugin>/skills/`.
+- **Sharing and distribution, from narrowest to widest:**
+  1. **Commit** `.agents/skills/` to the repo.
+  2. Ship a **plugin**: drop it in `.agents/plugins/` or `~/.gemini/config/plugins/`, or run `agy plugin install <path|git-url>`. For example, `agy plugin install https://github.com/GoogleChrome/modern-web-guidance`.
+  3. Use **Build with Google** curated bundles: Settings → Customizations → Build with Google Plugins (for example Firebase, Modern Web Guidance, Antigravity SDK).
+  4. **Agents CLI:** `uvx google-agents-cli setup` installs the `google-agents-cli-*` skills into every detected coding agent (Antigravity, Claude Code, Codex, Cursor, …). The default is global, and `--workspace` installs project-level. `npx skills add google/agents-cli` installs the skills only.
+  5. **Skill Registry / Agent Registry** hold governed skills for **ADK agents at runtime**, through `SkillToolset` + `GCPSkillRegistry`, not for loading into the Antigravity IDE (see 2.2.c). **Exam trap:** the registry answers "govern and version skills for deployed agents". A plugin answers "distribute skills to developers' coding agents".
+- **Example (`.agents/skills/deploy-staging/SKILL.md`):**
+```markdown
+---
+name: deploy-staging
+description: Deploys the current build to the staging Cloud Run service and smoke-tests it. Use when asked to deploy, release to staging, or verify a PR preview.
+---
+# Deploy to staging
+1. Run `scripts/preflight.sh --help`, then `scripts/preflight.sh` (lint + unit tests). Stop on failure.
+2. Build and deploy with `scripts/deploy.sh staging` — do not hand-write gcloud flags.
+3. Run the smoke checks listed in `references/smoke-checks.md` and report results.
+```
+
+**4. Hooks (in depth)**
+
+- **Files:**
+  - Workspace: `.agents/hooks.json`.
+  - Global: `~/.gemini/config/hooks.json`.
+  - The CLI also reads a `hooks` section in `~/.gemini/antigravity-cli/settings.json`.
+  - Plugins can ship their own `hooks.json`.
+  - To inspect them, use `/hooks` (CLI), Settings → Customizations → Hooks (2.0), or **…** → Customizations → Hooks (IDE).
+- **Schema.** The top-level keys are **named hooks**. Each named hook maps event names to handler arrays. `"enabled": false` disables a hook without deleting it.
+```json
+{
+  "block-secret-writes": {
+    "PreToolUse": [
+      { "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [ { "type": "command", "command": "./scripts/hooks/deny-secrets.sh", "timeout": 5 } ] }
+    ]
+  },
+  "tests-must-pass": {
+    "Stop": [ { "type": "command", "command": "./scripts/hooks/tests-gate.sh", "timeout": 120 } ]
+  },
+  "lint-reminder": {
+    "enabled": false,
+    "PreInvocation": [ { "type": "command", "command": "./scripts/hooks/reminder.sh" } ]
+  }
+}
+```
+  - **Tool events** (`PreToolUse`, `PostToolUse`) take a list of `{ "matcher": <regex>, "hooks": [handlers] }`. The matcher is a **regex on the tool name**: `""` or `"*"` means all tools, `"run_command|view_file"` matches either, and `"browser_.*"` matches a prefix.
+  - **Lifecycle events** (`PreInvocation`, `PostInvocation`, `Stop`) take a **plain list of handlers**, and any matcher is ignored.
+  - A **handler** is `type` (optional, only `"command"`), `command` (required), and `timeout` (**seconds**, default **30**).
+  - Matchable tool names include `view_file`, `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `list_dir`, `find_by_name`, `grep_search`, `search_web`, `read_url_content`, `run_command`, `manage_task`, `schedule`, `list_permissions`, `ask_permission`, `invoke_subagent`, `define_subagent`, `send_message`, `manage_subagents`, `ask_question`, `generate_image`. The docs don't give the matcher name format for MCP tools **(unverified)**.
+- **Events and contract.** Input arrives as JSON on **stdin** and output goes as JSON to **stdout**, all in **camelCase**. Every input carries `conversationId`, `workspacePaths`, `transcriptPath`, `artifactDirectoryPath` and `modelName`.
+
+| Event | Fires | Extra input | Output (stdout) | What it can do |
+|---|---|---|---|---|
+| `PreToolUse` | Before a tool executes | `toolCall{name,args}`, `stepIdx` | **`decision` (required)**: `allow` \| `deny` \| `ask` \| `force_ask` \| `deny_unless_prior_grant`. Optional: `reason`, `permissionOverrides` (e.g. `["command(npm test)"]`) | **Block** (hard deny), auto-approve, force a prompt even if "Always Allow" was cached, or only allow what a user granted before |
+| `PostToolUse` | After a tool completes | `toolCall`, `stepIdx`, `error` (set if the tool failed) | `{}` | **Observe only**: lint/format, audit logs, notify. It can't undo or hide the result |
+| `PreInvocation` | Before each model call | `invocationNum`, `initialNumSteps` | `injectSteps`: `[{userMessage}\|{ephemeralMessage}\|{toolCall}]` | Inject reminders or context, or force a tool call before the model thinks |
+| `PostInvocation` | After each model call | Same as `PreInvocation` | `injectSteps`, `terminationBehavior`: `force_continue` \| `terminate` \| `""` | Keep the loop going, or kill it |
+| `Stop` | When the execution loop terminates | `executionNum`, `terminationReason` (`model_stop`, `max_steps_exceeded`, `error`), `error`, `fullyIdle` | **`decision` (required)**: `"continue"` re-enters the loop, and `reason` is injected as a system message. Any other value allows the stop | **Definition-of-done gate**: don't let the agent finish while tests fail |
+
+- **Exit codes.** Unlike Gemini CLI and Claude Code (where **exit code 2 = block**), the Antigravity docs define blocking **only through the JSON `decision`**. Behavior on a non-zero exit, a timeout or malformed JSON is **not documented (unverified)**, so design hooks to **fail closed**: always print a valid decision, and treat a script error as `deny`.
+- **What hooks can and cannot enforce.** They **can** deterministically gate any tool call (commands, file writes, subagent spawns, web fetches), run formatters and linters, write audit logs (they get `transcriptPath` for export), inject steps, and stop the agent from declaring "done". They **cannot** rewrite tool arguments (there is no documented equivalent of Gemini CLI's `tool_input` override), redact a tool's output, or filter the model's tool list. Hooks also run with **your user privileges**, so a committed workspace `hooks.json` is code execution: review it like CI config.
+- **Example: deny writes to secrets** (`scripts/hooks/deny-secrets.sh`):
+```bash
+#!/usr/bin/env bash
+# PreToolUse on file-write tools: hard-deny secrets, allow everything else.
+set -euo pipefail
+payload="$(cat)"
+target="$(jq -r '.toolCall.args.TargetFile // empty' <<<"$payload")"
+if [[ "$target" =~ (^|/)(\.env[^/]*|secrets/|.*\.pem$|.*id_rsa) ]]; then
+  echo "blocked write to $target" >> .agents/hook-audit.log   # audit trail
+  printf '{"decision":"deny","reason":"Writes to secret files are blocked by policy (%s)."}\n' "$target"
+else
+  echo '{"decision":"allow"}'
+fi
+```
+  **Design note:** the same "never write secrets" requirement can also be met without code by `deny: ["write_file(.env)", …]` in permissions. Use the hook when you need **logic, logging or dynamic decisions**. Use a permission rule when a static pattern is enough (principle 2: the simpler control wins).
+- **Example: tests must pass before "done"** (`scripts/hooks/tests-gate.sh`, on `Stop`):
+```bash
+#!/usr/bin/env bash
+payload="$(cat)"
+# Only gate a normal, fully idle stop; cap retries to avoid an infinite loop.
+[[ "$(jq -r '.fullyIdle' <<<"$payload")" == "true" ]] || { echo '{"decision":"stop"}'; exit 0; }
+[[ "$(jq -r '.executionNum' <<<"$payload")" -lt 4 ]]  || { echo '{"decision":"stop"}'; exit 0; }
+if out="$(npm test --silent 2>&1)"; then
+  echo '{"decision":"stop"}'
+else
+  jq -n --arg r "Tests are failing — fix them before finishing: ${out: -1500}" '{decision:"continue", reason:$r}'
+fi
+```
+  **Precision vs 2.1.c:** `PostInvocation` + `force_continue` also keeps the loop alive, but it fires after **every** model call. The `Stop` hook with `decision: "continue"` is the event built for the "don't finish until green" gate.
+
+**5. Subagents, plugins, workflows, MCP, permissions (the essentials, with paths)**
+
+- **Subagents** live in `.agents/agents/<name>.md` or `<name>/agent.md`, in `~/.gemini/config/agents/`, or in `<plugin>/agents/`. They can also be created at runtime by `define_subagent`.
+  - **Frontmatter:** `name` and `description` are required. Optional fields are `tools` (explicit allowlist; a misspelled name can **hang** the subagent), `mainAgent`/`subagent` (default `true`), `model` (`inherit`\|`flash`\|`pro`), `commandExecutionPolicy` (`off`\|`auto`\|`eager`\|`sandbox`, default `sandbox`), `mcpServers`, and `skills`/`plugins`. The body is the system prompt.
+  - **Behavior:** a subagent gets a clean context (it does not inherit history) and can use workspace `inherit`\|`branch` (git worktree)\|`share`. Nesting is capped at **10 levels**. It inherits the parent's command prefixes, file scopes and sandbox, and permission prompts **bubble up** to the parent.
+  - **Managing them:** `/agents` (CLI) with **Alt+J** to jump to the next subagent awaiting approval. The built-ins are `research`, `browser` (`/browser` only) and `self`.
+- **Plugins:** see the layout above. The CLI commands are `agy plugin list | install <path|url> | enable | disable | uninstall <name>` and `agy plugin import gemini`, which converts Gemini CLI extensions and turns their legacy `commands` into skills.
+- **Workflows (deprecated):**
+  - **Paths:** `.agents/workflows/<name>.md` and `~/.gemini/config/workflows/<name>.md`. A workflow is a single file of up to **12,000 characters**, loaded **in full**, and invoked as `/<workflow-name>`. Workflows can call other workflows.
+  - **Retirement:** they are **retired on 2026-11-01**, after which they are no longer indexed or executable.
+  - **Migration:** `/migrate-workflows` scans both paths, scaffolds `.agents/skills/<name>/SKILL.md`, and renames each original to `.md.bak`. On a name clash, the **skill wins**.
+- **MCP:** use `mcp_config.json` (global `~/.gemini/config/`, workspace `.agents/`, or a plugin). The file holds `mcpServers`, and each server has `command` or `serverUrl` (never `url`/`httpUrl`), with optional `args`, `env`, `cwd`, `headers`, `authProviderType: "google_credentials"`, `oauth`, `disabled` and `disabledTools`. Details are in 2.1.a.
+- **Permissions:** rules take the form `action(target)` with the actions `read_file`, `write_file`, `read_url`, `execute_url`, `command`, `mcp` (plus `unsandboxed` on Windows and in the CLI). They are evaluated **Deny > Ask > Allow**, and a hook's `permissionOverrides` can supply extra grants per call. Details are in 2.1.a and 2.1.b.
+
+**6. When to use which**
+
+| Requirement shape | Use | Exact artifact | Why not the others |
+|---|---|---|---|
+| Invariant that should shape *every* answer ("use zod", "no `internal/` imports") | **Rule**, `always_on` or `AGENTS.md` | `AGENTS.md` / `.agents/rules/x.md` | A skill might not trigger. A hook can't teach style |
+| Long guide that's only sometimes relevant | **Rule**, `model_decision` | `trigger: model_decision` + good `description` | `always_on` burns the 20k budget every turn |
+| Conventions for one file type | **Rule**, `glob` | `trigger: glob`, `globs: "*.tf"` | Loads only when those files are touched |
+| Checklist used only on request | **Rule**, `manual` (`@`-mention), or a skill invoked by `/name` | `trigger: manual` | Pick the skill if it needs scripts or steps |
+| Repeatable multi-step procedure, especially with scripts or templates | **Skill** | `.agents/skills/<n>/SKILL.md` + `scripts/` | A rule bloats context and has no bundled assets. A workflow is deprecated |
+| "Must never happen", "always", "audit every…" | **Hook** (`PreToolUse` deny) or **permission deny** | `.agents/hooks.json` / `permissions.deny` | Rules and skills are advisory prompt text |
+| "Don't finish until tests pass" | **Hook** (`Stop` → `continue`) | `Stop` handler | A rule saying "run tests" is only a request |
+| Auto-format or lint after edits | **Hook** (`PostToolUse`) | matcher `write_to_file\|replace_file_content\|multi_replace_file_content` | — |
+| Separate context, least-privilege tools, parallel work | **Subagent** | `.agents/agents/<n>.md` (`tools`, `commandExecutionPolicy`) | A skill runs inside the main context with the main agent's tools |
+| Live system data or external actions | **MCP server** | `mcp_config.json` + `mcp(server/tool)` perms | A skill carries knowledge, not live access |
+| Ship rules + skills + hooks + MCP + agents to many devs as one unit | **Plugin** | `plugin.json` + component folders | Copying files per repo drifts |
+| Share only rules across repos | `rules.json` `inherits` / `entries` | `.agents/rules.json` | A plugin is heavier if you only need rules |
+
+**Keyword → primitive signals**
+
+| Phrase in the question | Answer |
+|---|---|
+| "coding standard", "convention", "always follow", "project context" | Rule / `AGENTS.md` |
+| "only for `*.sql` files", "when editing Terraform" | Rule with `trigger: glob` + `globs` |
+| "only when relevant", "reduce tokens", "detailed guide" | Rule `model_decision`, or a skill (progressive disclosure) |
+| "only when explicitly requested", "audit rubric" | Rule `trigger: manual` (`@`-mention) |
+| "step-by-step procedure", "bundle a script", "reusable across tools", "slash command" | Skill |
+| "guarantee", "block", "prevent", "enforce", "regardless of the prompt", "log every" | Hook (`PreToolUse` → `deny`) and/or a `deny` permission |
+| "before the agent declares done", "keep working until" | `Stop` hook (`decision: "continue"`) |
+| "inject a reminder every turn" | `PreInvocation` hook (`injectSteps` → `ephemeralMessage`) |
+| "read-only reviewer", "restricted tools", "own context", "parallel" | Subagent |
+| "one install", "distribute to the org", "bundle" | Plugin |
+| "legacy workflow", "12,000 characters", "Nov 2026" | Migrate to skills (`/migrate-workflows`) |
+
+**Common distractors**
+- `trigger: alwaysOn` / `modelDecision`. camelCase is **silently dropped**, so use `always_on` / `model_decision`.
+- An **unquoted** `globs: *.ts`. YAML reads `*` as an alias, so write `globs: "*.ts"`.
+- Rules in nested folders under `.agents/rules/` without `rules.json`.
+- Putting a hook in `.agents/settings.json` (not a documented location). Hooks live in `hooks.json`. Only the CLI's `~/.gemini/antigravity-cli/settings.json` also accepts them.
+- Blocking in Antigravity with **exit code 2**, or `decision: "block"`. Those are Gemini CLI and Claude Code conventions. Antigravity uses JSON `decision: "deny"`.
+- Expecting `PostToolUse` to block. It returns `{}`, and the tool has already run.
+- A hook `timeout` in **milliseconds**. Antigravity uses **seconds** (default 30). Gemini CLI uses ms (default 60000).
+- Putting CLI global skills in `~/.gemini/config/skills/`. The CLI docs list `~/.gemini/antigravity-cli/skills/`. The `.gemini/skills/` folder from Gemini CLI must be **moved** to `.agents/skills/`.
+- Skill Registry as the way to give **developers' IDE agents** a skill. It serves ADK/runtime agents. Use a plugin or the repo instead.
+- `url` / `httpUrl` in `mcp_config.json`. Use `serverUrl`.
+
+**Antigravity vs Gemini CLI vs Claude Code (paths and semantics)**
+
+| Concern | Antigravity | Gemini CLI | Claude Code (Anthropic docs) |
+|---|---|---|---|
+| Always-on project context | `AGENTS.md` / `GEMINI.md` (any dir, walked up) | `GEMINI.md` (hierarchical) | `CLAUDE.md` (+ `CLAUDE.local.md`) |
+| Global context | `~/.gemini/{AGENTS,GEMINI}.md`, `~/.gemini/config/rules/` | `~/.gemini/GEMINI.md` | `~/.claude/CLAUDE.md` |
+| Scoped / modular rules | `.agents/rules/*.md`, `trigger` + `globs` | Subdirectory `GEMINI.md` files | `.claude/rules/*.md` with `paths:` frontmatter |
+| Skills | `.agents/skills/` · `~/.gemini/config/skills/` · CLI `~/.gemini/antigravity-cli/skills/` | `.gemini/skills/` · `~/.gemini/skills/` | `.claude/skills/` · `~/.claude/skills/` |
+| Custom slash commands | Skills (`/name`); workflows deprecated | `.gemini/commands/*.toml` | Skills (legacy `.claude/commands/*.md`) |
+| Hooks config | `.agents/hooks.json` · `~/.gemini/config/hooks.json` | `hooks` in `.gemini/settings.json` / `~/.gemini/settings.json` | `hooks` in `.claude/settings.json` / `~/.claude/settings.json` / managed settings |
+| Hook events | `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop` | `BeforeTool`, `AfterTool`, `BeforeAgent`, `AfterAgent`, `BeforeModel`, `AfterModel`, `BeforeToolSelection`, `SessionStart`, `SessionEnd`, `PreCompress`, `Notification` | `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`, `Notification`, `PreCompact` (among others) |
+| Block semantics | JSON `decision: "deny"` | Exit 2 or `decision: "deny"`/`"block"` | Exit 2 or JSON permission decision `deny` |
+| Hook timeout unit | Seconds (default 30) | Milliseconds (default 60000) | Seconds |
+| Subagents | `.agents/agents/<n>.md` | `.gemini/agents/*.md` **(unverified)** | `.claude/agents/*.md` · `~/.claude/agents/` |
+| MCP | `.agents/mcp_config.json` · `~/.gemini/config/mcp_config.json` (`serverUrl`) | `mcpServers` in `settings.json` (`url`/`httpUrl`) | `.mcp.json` (project) · `claude mcp add --scope user` |
+| Packaging | Plugin (`plugin.json`) | Extension (`gemini-extension.json`) | Plugin (`.claude-plugin/plugin.json`) |
+| Permissions | `permissions.{allow,deny,ask}`, `action(target)` | Policy/settings **(not covered here)** | `permissions.{allow,ask,deny}`, e.g. `Bash(npm test)` |
+
+#### 2.2.c Augmenting Antigravity with Agents CLI (build, scale, govern, optimize deployed agents)
 
 **What Agents CLI is**
 - It is the **"Agents CLI in Agent Platform"** (`google-agents-cli`, GitHub `google/agents-cli`). It is **not itself a coding agent**. It is a machine-readable CLI plus **skills** that give any coding agent (Antigravity, Claude Code, Codex, Gemini CLI, Cursor) expert ADK, eval and deploy knowledge.
@@ -511,6 +851,62 @@ C. Move developers to GKE Agent Sandbox
 D. Run agents with `nohup` on the workstation
 **Answer: B.** Suspend preserves RAM and agent context while stopping compute billing, and the hooks keep the VM alive only during active work. A burns compute while idle. C is the wrong tool for interactive dev environments. D doesn't prevent the idle shutdown.
 
+**Q11.** A team is moving from Gemini CLI to Antigravity CLI. Their repo has ten custom skills in `.gemini/skills/`, and their `GEMINI.md` files are at the repo root and in several service folders. After switching, the rules still apply but none of the skills appear as slash commands. What should they do?
+A. Run `agy plugin import gemini` to convert the skills
+B. Move `.gemini/skills/` to `.agents/skills/` in the repo. The `GEMINI.md` files need no change
+C. Copy the skills into `~/.gemini/config/rules/` so they load globally
+D. Rename every `SKILL.md` to `AGENTS.md`
+**Answer: B.** The migration guide says workspace skills must be moved by hand from `.gemini/skills/` to `.agents/skills/`, while `GEMINI.md`/`AGENTS.md` context files work unchanged. A converts *extensions* into plugins, not a repo's skill folder. C turns procedures into rules (and rule files need `trigger` frontmatter). D turns on-demand skills into always-on context.
+
+**Q12.** A platform team wants protobuf conventions (never reuse a field number, always mark deleted fields `reserved`) applied whenever the agent edits `.proto` or generated `.pb.go` files. The conventions must not consume context in other tasks. Which rule file is correct?
+A. `.agents/rules/proto.md` with `trigger: glob` and `globs: "*.proto, **/*.pb.go"`
+B. `.agents/rules/proto.md` with `trigger: always_on`
+C. `.agents/rules/proto/conventions.md` with `trigger: glob` and `globs: *.proto`
+D. `AGENTS.md` at the repo root with a `globs:` frontmatter block
+**Answer: A.** A `glob` rule activates only when the agent touches matching files, and the quoted, comma-separated `globs` string is the documented format. B costs tokens on every turn. C is nested (ignored without `rules.json`) and has an unquoted `*` that YAML parses as an alias. D is wrong because `AGENTS.md` takes no frontmatter and is always on.
+
+**Q13.** Internal audit has a 15-page security review rubric. Auditors want the agent to use it only when they explicitly ask for an audit, and it must never load automatically, even if a task looks security-related. What should you configure?
+A. A rule with `trigger: model_decision` and a description mentioning security audits
+B. A rule with `trigger: manual`, which auditors pull in by `@`-mentioning it in chat
+C. A `PreInvocation` hook that injects the rubric as an `ephemeralMessage`
+D. Add the rubric to the global `~/.gemini/GEMINI.md`
+**Answer: B.** `manual` rules are never loaded automatically, only on an explicit `@` mention, and the docs cite audit rubrics as the use case. A lets the model decide to load it. C injects it every turn. D makes it always on across every project and eats into the 20k-token budget.
+
+**Q14.** Agents in a repo often stop and report "done" while unit tests are failing. There is already an `AGENTS.md` rule saying "always run tests before finishing". The team wants a deterministic gate that sends the agent back to work with the failure output, with minimal extra machinery. What should you add?
+A. A `PostToolUse` hook on `write_to_file` that returns `{"decision":"deny"}` when tests fail
+B. A `Stop` hook in `.agents/hooks.json` that runs the tests and, on failure, returns `{"decision":"continue","reason":"<failures>"}`, with a retry cap
+C. Change the rule to `trigger: always_on` with stronger wording
+D. A `PreToolUse` hook on `run_command` that returns `force_ask`
+**Answer: B.** A `Stop` hook with `decision: "continue"` re-enters the loop and injects the reason as a system message, which makes it a deterministic definition-of-done gate. A fails because `PostToolUse` only returns `{}` and cannot block. C is still advisory. D only adds prompts and never checks the test result.
+
+**Q15.** You are porting a Gemini CLI `BeforeTool` hook (defined in `.gemini/settings.json`, `"timeout": 5000`, blocks by exiting with code 2) to Antigravity. Which set of changes is correct?
+A. Keep the file and event name. Antigravity reads Gemini CLI `settings.json` hooks
+B. Move it to `.agents/hooks.json` as `PreToolUse` under a named hook, set `"timeout": 5` (seconds), and block by printing `{"decision":"deny","reason":"…"}` to stdout
+C. Move it to `.agents/rules/hooks.md` with `trigger: always_on`
+D. Move it to `.agents/hooks.json` as `PreInvocation` with a `matcher` and keep `"timeout": 5000`
+**Answer: B.** Antigravity uses `hooks.json`, the `PreToolUse` event with a regex tool matcher, a timeout in seconds (default 30), and a JSON `decision` for blocking. A is wrong because Gemini CLI hook config is not a documented Antigravity location. C turns enforcement into advisory text. D ignores the matcher on lifecycle events, and 5000 would mean 5000 seconds.
+
+**Q16.** A central platform team must roll out the same four skills, two `glob` rules, a secrets-blocking hook, and a read-only BigQuery MCP server to 300 developers using Antigravity 2.0 and the CLI across 150 repos. Updates must ship as one versioned unit. What is the best approach?
+A. Publish the skills to Skill Registry and ask developers to copy the rest by hand
+B. Package everything as a plugin (`plugin.json` plus `skills/`, `rules/`, `hooks.json`, `mcp_config.json`) and install it globally (`~/.gemini/config/plugins/`, or `agy plugin install <git-url>` for the CLI)
+C. Add a `.agents/rules.json` with `inherits` pointing at a shared repo
+D. Put all the content into one large `AGENTS.md` in every repo
+**Answer: B.** Plugins are the distribution unit for skills, rules, hooks, MCP servers and agents. A misuses Skill Registry, which serves ADK and runtime agents rather than IDE customization, and it leaves most of the bundle manual. C shares only rules. D can't carry hooks or MCP config and bloats the always-on budget.
+
+**Q17.** You need a security reviewer that can only read code and search, runs in its own context so it doesn't pollute the main conversation, uses the stronger model tier, and runs any shell commands only in the sandbox. The main agent should delegate to it automatically. What should you create?
+A. A skill `.agents/skills/security-review/SKILL.md` describing the review steps
+B. A subagent `.agents/agents/security-reviewer.md` with `description`, `tools: [view_file, grep_search]`, `model: pro`, `commandExecutionPolicy: sandbox`, and `subagent: true`
+C. A rule with `trigger: model_decision` about security reviews
+D. A plugin containing only `plugin.json`
+**Answer: B.** Only a subagent provides context isolation plus a tool allowlist, a model tier and an execution policy, and the planner delegates to it based on `description`. A and C run inside the main agent's context with its full toolset. D carries no behavior. Spell tool names exactly, because a misspelled tool can hang the subagent.
+
+**Q18.** A team has 25 legacy workflows in `.agents/workflows/` and `~/.gemini/config/workflows/`, several of them near the 12,000-character limit, and they want them to keep working after the retirement date. Some workflow names match skills that already exist. What should they do?
+A. Nothing. Workflows remain supported indefinitely
+B. Run `/migrate-workflows` in Antigravity 2.0 to scaffold `.agents/skills/<name>/SKILL.md` for each one (originals are renamed `.bak`), then move embedded scripts into `scripts/`. Where names collide, the existing skill already takes precedence
+C. Convert each workflow to an `always_on` rule
+D. Split each workflow into two files under 6,000 characters
+**Answer: B.** Workflows retire on 2026-11-01, and `/migrate-workflows` is the documented path. Skills win name collisions, and moving scripts into the skill bundle keeps `SKILL.md` lean. C loads procedures on every turn. D keeps a deprecated format.
+
 ---
 
 ### Key doc links
@@ -551,4 +947,11 @@ D. Run agents with `nohup` on the workstation
 - Agent Registry skills: https://docs.cloud.google.com/agent-registry/register-skills
 - Gemini CLI extensions / skills: https://geminicli.com/docs/extensions/reference/, https://geminicli.com/docs/cli/skills/
 - CodeMender: https://cloud.google.com/security/codemender
+- Antigravity IDE workflows (legacy): https://antigravity.google/docs/ide/workflows
+- Antigravity CLI `/agents` command (custom agent paths): https://antigravity.google/docs/cli/commands/agents
+- Antigravity CLI settings / reference (settings.json keys): https://antigravity.google/docs/settings, https://antigravity.google/docs/cli/reference
+- Build with Google plugins: https://antigravity.google/docs/build-with-google
+- Agent Skills open specification: https://agentskills.io/specification
+- Gemini CLI hooks / hooks reference: https://geminicli.com/docs/hooks/, https://geminicli.com/docs/hooks/reference/
+- Claude Code hooks / memory (CLAUDE.md, rules) / skills / subagents / plugins: https://code.claude.com/docs/en/hooks, https://code.claude.com/docs/en/memory, https://code.claude.com/docs/en/skills, https://code.claude.com/docs/en/sub-agents, https://code.claude.com/docs/en/plugins
 - Data Agent Kit: https://cloud.google.com/products/data-agent-kit

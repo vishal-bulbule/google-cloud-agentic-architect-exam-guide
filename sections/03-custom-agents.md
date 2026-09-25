@@ -458,7 +458,7 @@ cfg = rag.RagRetrievalConfig(
 
 **Agent Registry** is the governance catalog of **Agents, MCP servers, Endpoints and Skills** (resources: `Agent`, `McpServer`, `Endpoint`, `Skill`, `SkillRevision`, `Publisher`).
 - **Read vs write split:** you discover through the read-only `Agent`/`McpServer`/`Endpoint` resources, and you register or modify through the writable **`Service`** resource (`gcloud agent-registry services delete ...`).
-- **Automatic registration** covers supported resources such as Agent Runtime agents and Google Cloud remote MCP servers. It is **single-project scope**. Use **manual registration** for external or custom components and for cross-project central catalogs. To remove an auto-registered MCP server, delete the server or disable its API.
+- **Automatic registration** covers Agent Runtime agents, built-in Workspace and Gemini Enterprise agents, Google Cloud remote MCP servers (registered when you enable the product API), GKE Deployments labelled `registry.gke.io/functional-type`, and Cloud Run workloads deployed with `--functional-type=agent|mcp-server`. It is **single-project scope**. Use **manual registration** for external or custom components and for cross-project central catalogs. To remove an auto-registered MCP server, delete the server or disable its API.
 - **Identifiers:** URNs (`urn:agent:...`, `urn:mcp:googleapis.com:projects:N:locations:global:SERVER`, `urn:skill:...`) are for **inventory and lookup only**. Policies use the **agent principal**, not the URN.
 - **Bindings** connect a source agent to a target agent, MCP server or endpoint, or to an **auth provider** (delegated access).
 - The registry supports A2A specification versions **0.3 and 1.0**.
@@ -497,6 +497,388 @@ root_agent = LlmAgent(name="orchestrator", model="gemini-flash-latest",
 - "Curated, least-privilege DB queries as tools" → **MCP Toolbox** (not raw `execute_sql`).
 - "No infra to host, just let agent query BigQuery" → **BigQuery remote MCP server** + `mcp.toolUser`.
 - "Salesforce/SAP" → **Application Integration connectors**.
+
+#### 3.2.4 Deep dive — Registering MCP servers in Agent Registry
+
+> 📊 **Infographic:** Agent Registry — registering MCP servers
+>
+> [![Agent Registry — registering MCP servers](../infographics/17-agent-registry-mcp.png)](../infographics/17-agent-registry-mcp.png)
+
+Registering an MCP server does three jobs. It makes the server and its tools **discoverable** (console, gcloud, the registry's own MCP server, ADK, Agent Studio). It gives **bindings** a target to point at (resource links and auth providers). And it makes the server a **governable destination**: an egress Agent Gateway denies anything that isn't registered, and IAM egress policies can only be bound to registered resources. If an MCP server isn't in the registry, the platform can't govern it.
+
+**A. Resource model**
+
+| Resource | Access | What it is | Resource name |
+|---|---|---|---|
+| `Service` | **Writable** | Manual registration of an agent, MCP server or endpoint. The spec you set decides which read view it becomes. The output-only `registryResource` field holds the projected name | `projects/P/locations/L/services/ID` |
+| `McpServer` | Read-only | Discovery view of an MCP server and its tools | `projects/P/locations/L/mcpServers/ID` |
+| `Agent` | Read-only | Discovery view of an agent. A2A skills are indexed from its Agent Card | `…/agents/ID` |
+| `Endpoint` | Read-only | Discovery view of a target URL, usually a REST API | `…/endpoints/ID` |
+| `Skill`, `SkillRevision`, `Publisher` (Preview) | Managed directly, **not** through `Service` | Standalone `SKILL.md` packages with immutable revisions and a default revision. Your skills sit under the `private` publisher | `…/skills/private-ID` |
+| `Binding` | Writable | Source agent → target (agent, MCP server, endpoint), or source agent → **auth provider** | `…/bindings/ID` |
+
+- **Write through `Service`, read through the typed views.** You never create or patch an `McpServer` directly. To change a manually registered server, you update its `Service`.
+- **The spec flag picks the collection.** The three flag pairs are mutually exclusive. If you use the wrong pair, the entry lands in the wrong collection and type-specific policies may not apply to it.
+
+  | gcloud flags | REST field | Becomes | Valid spec types |
+  |---|---|---|---|
+  | `--mcp-server-spec-type` / `--mcp-server-spec-content` | `mcpServerSpec` | `McpServer` | `tool-spec` (REST enum also has `NO_SPEC`) |
+  | `--agent-spec-type` / `--agent-spec-content` | `agentSpec` | `Agent` | `a2a-agent-card`, `no-spec` |
+  | `--endpoint-spec-type` | `endpointSpec` | `Endpoint` | `no-spec` |
+- **Interfaces** hold the connection details: `url` plus `protocolBinding`, which is `jsonrpc`, `http-json` or `grpc` (in Terraform, `JSONRPC`, `HTTP_JSON` or `GRPC`). MCP servers normally use `jsonrpc`. With an `A2A_AGENT_CARD` spec, `interfaces` must be empty, because the card carries its own URLs.
+- **REST:** `POST https://agentregistry.googleapis.com/v1/projects/P/locations/L/services?serviceId=ID`. `serviceId` is 4–63 characters of `[a-z0-9-]`. The call returns a long-running **Operation**. The optional `requestId` (a UUID) makes retries idempotent for at least 60 minutes. Create needs `agentregistry.services.create` and the `cloud-platform` or `agentregistry.read-write` scope.
+
+**Three identifiers you must not confuse**
+
+| Identifier | Example | Used for |
+|---|---|---|
+| **URN** (logical, immutable) | Google remote MCP: `urn:mcp:googleapis.com:projects:PROJECT_NUMBER:locations:global:SERVER_NAME`<br>Manual MCP: `urn:mcp:projects-PROJECT_NUMBER:projects:PROJECT_NUMBER:locations:REGION:agentregistry:services:SERVER_ID` | Inventory, lookup, `--filter="mcpServerId='urn:mcp:…'"`, binding source/target |
+| **Resource URI** (runtime reference) | The Cloud Run service, GKE Deployment or Agent Runtime instance that actually runs it (`agentregistry.googleapis.com/system/RuntimeReference`) | Topology graph queries |
+| **Agent principal** (IAM) | `principal://agents.global.org-ORG_ID.system.id.goog/resources/…` | **All** access policies. URNs never go in IAM |
+
+**Locations**
+- **Global**, multi-regions **`us`** and **`eu`**, and about 40 regions. The registry is **project-scoped**: enable the API per project. If you move to another project, nothing migrates; you recreate every entry.
+- **`us`/`eu` restriction:** in the multi-regions you **can't** manually register agents, MCP servers or endpoints, and you can't create bindings. Use a region or `global`. Standalone skills *are* supported in `global` and the multi-regions.
+- **Google-managed remote MCP servers live in `global`**, so IAM bindings on them must use `--region=global`. A regional flag such as `--region=us-central1` returns `NOT_FOUND`.
+- **Cross-project governance:** the registry, the Agent Gateway and the agent endpoints must be in the **same region or `global`**. Gemini Enterprise alignment:
+
+  | Gemini Enterprise app | Agent Gateway | Agent Registry |
+  |---|---|---|
+  | `global` | `us-central1` | `us-central1`, `us` or `global` |
+  | `us` | `us-central1` | `us-central1` or `us` |
+  | `eu` | `europe-west1` | `europe-west1` or `eu` |
+
+**B. Setup**
+
+```bash
+gcloud services enable agentregistry.googleapis.com --project=PROJECT_ID   # also turns on the registry's own MCP server
+gcloud services enable iap.googleapis.com --project=PROJECT_ID             # only if Agent Gateway will enforce policy
+# Cloud Run auto-registration also needs: run, iam, agentregistry and App Hub APIs
+```
+
+| Role | Grants | Typical holder |
+|---|---|---|
+| `roles/agentregistry.viewer` | get, list and search agents, MCP servers, endpoints and skills; view bindings | Developers, **and every agent identity that resolves tools at runtime** |
+| `roles/agentregistry.editor` | Viewer plus `services.create/update/delete` (manual registration, tool-spec updates) and skills. It **can't** create bindings | Platform engineers who onboard servers |
+| `roles/agentregistry.admin` | `agentregistry.*`, including **`bindings.create/update/delete`** | Registry administrators |
+| `roles/agentregistry.user` | Skills and skill revisions CRUD; read-only on everything else | Skill authors |
+| `roles/serviceusage.serviceUsageAdmin`, `roles/resourcemanager.projectIamAdmin` | Enable the API and grant the roles above | Project setup |
+| `roles/mcp.toolUser` (`mcp.tools.call`) | Call tools on Google MCP servers, including `agentregistry.googleapis.com/mcp` | Any caller of Google remote MCP servers |
+| `roles/iap.egressor` | Egress through Agent Gateway to a registered target (granted to the **agent principal** on the target) | Agent identities |
+| `roles/iap.admin` | Manage IAP egress policies on registry resources | Security admins |
+
+> ⚠️ **Don't grant `agentregistry.editor` or `.admin` to agents.** Those roles can edit tool annotations such as `readOnlyHint` and `destructiveHint`, and policies trust those annotations. They can also enroll a malicious third-party agent. Agents get **viewer** only.
+
+**C. Automatic registration (same project only)**
+
+| Source | How to opt in | What lands in the registry | How to remove it |
+|---|---|---|---|
+| **Google and Google Cloud remote MCP servers** (BigQuery, Compute Engine, Cloud SQL, Agent Search …) | **Enable the product's API** in the project (for example `gcloud services enable compute.googleapis.com`) | The server **and its tools**, immediately, in the **`global`** location. No tool spec to upload | **Disable the product API** (or delete the underlying server) |
+| **Apigee API hub** | Turn on sync of MCP-style APIs to Agent Registry | Imported MCP APIs. Keep the sync enabled or the data goes stale | Stop the sync |
+| **GKE** | Deployment **label** `registry.gke.io/functional-type: "MCP_SERVER"`, plus the **annotations** `modelcontextprotocol.info/urls` (endpoint URLs) and `modelcontextprotocol.info/capabilities` (card: endpoint, protocol) | The GKE controller **introspects** the server, gets its tool spec and registers the tools. The Deployment name becomes the display name | Delete the Deployment (the docs say to delete the underlying server; whether removing the label deregisters it is unverified) |
+| **Cloud Run** (Preview) | `gcloud beta run deploy SVC --image=IMG --functional-type=mcp-server [--identity-type=agent-identity\|service-account]` | Server name and type `MCP_SERVER` under `/mcpServers`. The identity defaults to a **service account** if you don't set one | Delete the service (whether tools are introspected for Cloud Run servers is unverified) |
+
+- **GKE backward compatibility:** the old annotation `apphub.cloud.google.com/functional-type` still works, but the label is recommended.
+- **Only Cloud Run *services* can be MCP servers.** Jobs support only `--functional-type=agent`.
+- **Agents, for contrast:**
+  - Agent Runtime agents are registered with no flag, and updates and deletes sync automatically.
+  - On Cloud Run, `--functional-type=agent` **requires** `--identity-type=agent-identity`; any other identity type is an error.
+  - GKE needs the label `registry.gke.io/functional-type: "AGENT"` plus the annotation `a2a-protocol.org/agent-card`.
+  - Built-in Workspace and Gemini Enterprise agents appear with no setup.
+- **Automatic registration never crosses projects.** A central governance project must register workload-project components manually.
+
+**D. Manual registration of an MCP server, step by step**
+
+Use manual registration for third-party or SaaS MCP servers, on-premises or other-cloud servers, unsupported runtimes, and servers in another project that a central registry and gateway must govern.
+
+1. **Prerequisites.** The API is enabled, you hold `roles/agentregistry.editor`, and the location is a **region or `global`** (not `us`/`eu`).
+2. **Write `toolspec.json`.** Its payload is exactly the shape of an MCP `tools/list` response. The file limit is **10 KB** and a service can hold at most **100 tools**. **Manual registration does not introspect the server.** The registry records the endpoint and only the tools you declare.
+   ```json
+   {"tools": [
+     {"name": "get_customer_info", "description": "Retrieves customer details.",
+      "inputSchema": {"type": "object", "properties": {"email": {"type": "string"}}},
+      "annotations": {"title": "Get Customer Info", "readOnlyHint": true, "idempotentHint": true}},
+     {"name": "create_support_ticket", "description": "Creates a support ticket.",
+      "annotations": {"destructiveHint": true, "idempotentHint": false, "openWorldHint": true}}
+   ]}
+   ```
+   The annotation defaults follow the MCP spec: `readOnlyHint=false`, **`destructiveHint=true`**, `idempotentHint=false`, **`openWorldHint=true`**. If you leave a tool unannotated, policies treat it as a potentially destructive, open-world tool.
+3. **Register it.**
+   - **Console:** Agent Registry → **MCP servers** tab → **Add MCP server** → enter the display name, description and region → under **Tool specification**, enter the endpoint URL and paste the tool spec, or click **Import tools** (this only works for **publicly reachable** URLs) → **Next** → select the tools to include → **Save**.
+   - **gcloud:**
+     ```bash
+     gcloud agent-registry services create crm-mcp \
+       --project=PROJECT_ID --location=us-central1 \
+       --display-name="CRM MCP" \
+       --mcp-server-spec-type=tool-spec \
+       --mcp-server-spec-content=@toolspec.json \
+       --interfaces=url=https://crm.example.com/mcp,protocolBinding=jsonrpc
+     ```
+   - **Terraform:**
+     ```hcl
+     resource "google_agent_registry_service" "crm_mcp" {
+       location     = "us-central1"
+       service_id   = "crm-mcp"
+       display_name = "CRM MCP"
+       interfaces {
+         url              = "https://crm.example.com/mcp"
+         protocol_binding = "JSONRPC"
+       }
+       mcp_server_spec {
+         type    = "TOOL_SPEC"
+         content = file("toolspec.json")
+       }
+     }
+     # registry_resource output = projects/…/locations/…/mcpServers/…
+     ```
+   - **REST body:** `{"displayName": "...", "interfaces": [{"url": "...", "protocolBinding": "JSONRPC"}], "mcpServerSpec": {"type": "TOOL_SPEC", "content": {"tools": [...]}}}`. This body is assembled from the REST reference; the enum spelling of `protocolBinding` in REST is unverified.
+   - **From an agent or IDE:** the `create_service` tool on `https://agentregistry.googleapis.com/mcp`.
+4. **Verify.**
+   ```bash
+   gcloud agent-registry mcp-servers list --project=PROJECT_ID --location=us-central1 \
+     --filter="displayName='CRM MCP'"          # or mcpServerId='urn:mcp:…'
+   gcloud agent-registry mcp-servers describe crm-mcp --project=PROJECT_ID --location=us-central1
+   ```
+   The server's details page has these tabs:
+   - **Overview:** URN, location and an ADK snippet.
+   - **Tools:** schema and **annotations** per tool, with a per-tool ADK snippet.
+   - **Observability:** latency, traffic, errors and token spend.
+   - **Security:** Security Command Center findings for that resource.
+
+   In Terraform, use the data source `google_agent_registry_mcp_server`.
+5. **Update when the server changes.** The registry never re-scans a manually registered server, so new tools stay invisible until you upload the spec again:
+   ```bash
+   gcloud agent-registry services update crm-mcp --project=PROJECT_ID --location=us-central1 \
+     --mcp-server-spec-content=new-toolspec.json
+   ```
+   The upload **replaces** the whole tool list; it doesn't merge. The display name and description can be edited in the console under Overview → **Edit**.
+   - **Docs inconsistency:** the *Manage MCP tools* page says Terraform supports only `NO_SPEC` for MCP servers and can't carry tool specs, while *Register MCP servers* shows `mcp_server_spec { type = "TOOL_SPEC" }`. For tool-spec changes, use gcloud, the console or the API.
+6. **Delete.**
+   - **Manual entries:** `gcloud agent-registry services delete crm-mcp --project=PROJECT_ID --location=us-central1`. In the console, you type `DELETE` to confirm; in Terraform, remove the resource and apply. The server disappears from search and discovery.
+   - **Auto-registered Google servers:** you can't delete the entry. Disable the product API or delete the underlying server.
+   - **Clean up the dependents yourself.** Deleting the entry does **not** delete bindings or policies that reference it. **Manual cross-project entries** also never auto-update when the remote server changes or is deleted.
+
+**E. Endpoints, A2A agents and custom ADK agents (same `Service` pattern)**
+
+```bash
+# External REST API as a governable destination
+gcloud agent-registry services create payments-api --location=us-central1 --display-name="Payments API" \
+  --endpoint-spec-type=no-spec --interfaces=url=https://api.example.com/v1,protocolBinding=http-json
+
+# Composite "core Google APIs" endpoint: one IAP binding for many hostnames (hub-and-spoke gateway)
+gcloud agent-registry services create core-gapi-services --project=CENTRAL_PROJECT --location=us-central1 \
+  --display-name="Core Google APIs" --endpoint-spec-type=no-spec \
+  --interfaces=protocolBinding=jsonrpc,url=https://telemetry.googleapis.com \
+  --interfaces=protocolBinding=jsonrpc,url=https://iamcredentials.googleapis.com \
+  --interfaces=protocolBinding=jsonrpc,url=https://agentregistry.googleapis.com
+
+# A2A agent (card <= 10 KB, A2A 0.3 or 1.0; card skills are indexed for search)
+gcloud agent-registry services create billing-agent --location=global --display-name="Billing" \
+  --agent-spec-type=a2a-agent-card --agent-spec-content=@agent-card.json
+
+# Non-A2A REST agent: discoverable by name/description only, no searchable skills
+gcloud agent-registry services create travel-agent --location=global --display-name="Travel" \
+  --agent-spec-type=no-spec --interfaces=url=https://travel.example.com/v1,protocolBinding=http-json
+```
+- **Endpoint connection tests:** the console's **Test connection** works only for public URLs. You can still register private URLs.
+- **Custom ADK agent on your own infrastructure:** expose it over A2A (`to_a2a(root_agent)` serves `/.well-known/agent-card.json`), save the generated card, then register it with `--agent-spec-type=a2a-agent-card`.
+- **Skills (Preview):**
+  - Create one with `gcloud alpha agent-registry skills create SKILL_ID --location=global --display-name=… --payload=./skill.zip`, or with `--gcs-source-uri=gs://…`. For the GCS option, grant `storage.objects.get` to `service-PROJECT_NUMBER@gcp-sa-agentregistry.iam.gserviceaccount.com`.
+  - The ID becomes `private-SKILL_ID`.
+  - Limits: ZIP ≤ 500 KB compressed, ≤ 10 MB uncompressed, ≤ 1 MB per file.
+
+**F. Consuming registered MCP servers**
+
+| Search mode | Agents | MCP servers | Skills |
+|---|---|---|---|
+| Keyword (`AND`/`OR`/`NOT`) | ✅ metadata, description, **A2A skills** | ✅ description and **tools** | ✅ metadata only |
+| Prefix (`displayName:Prod_*`) | ✅ | ✅ | ✅ |
+| **Semantic** | ❌ | ❌ | ✅ indexes the whole `SKILL.md` (`--search-type=semantic`) |
+
+```bash
+gcloud agent-registry mcp-servers search --project=P --location=L --search-string="database"
+gcloud agent-registry agents search      --project=P --location=L --search-string="flight OR booking"
+gcloud alpha agent-registry skills search --project=P --location=L --query="manage relational databases" --search-type=semantic
+```
+
+**The registry as an MCP server.** It lives at `https://agentregistry.googleapis.com/mcp` over Streamable HTTP. It accepts OAuth and IAM credentials, never API keys, and `tools/list` needs no auth. Its tools:
+- **Discovery:** `search_agents`, `search_mcp_servers`, `get_agent`, `get_mcp_server`, `get_endpoint`, `get_service`, `list_*`, `list_bindings`, `get_binding`, `fetch_available_bindings`, `get_operation`.
+- **Admin:** `create_service`, `update_service`, `delete_service`, `create_binding`, `update_binding`, `delete_binding`.
+
+**ADK (Python) — resolve at runtime instead of hard-coding URLs.** Requirements: `pip install "google-adk[a2a,agent-identity]"` (the module imports both extras at load time, so a core-only install raises `ImportError`), `google-adk>=1.29.0`, and ADC.
+
+```python
+from google.adk.agents.llm_agent import LlmAgent
+from google.adk.auth.credential_manager import CredentialManager
+from google.adk.integrations.agent_identity import GcpAuthProvider
+from google.adk.integrations.agent_registry import AgentRegistry
+
+CredentialManager.register_auth_provider(GcpAuthProvider())      # lets ADK resolve auth-provider bindings
+registry = AgentRegistry(project_id=PROJECT, location="us-central1")  # optional header_provider=callable
+
+crm_tools = registry.get_mcp_toolset(
+    mcp_server_name="mcpServers/crm-mcp",                         # short form; full: projects/P/locations/L/mcpServers/ID
+    continue_uri="https://app.example.com/oauth/continue")        # only for 3-legged OAuth (user consent)
+billing = registry.get_remote_a2a_agent(
+    agent_name="agents/billing-agent",
+    httpx_client=authed_httpx_client)                             # A2A calls are NOT auto-authenticated
+
+root_agent = LlmAgent(name="orchestrator", model="gemini-flash-latest",
+                      tools=[crm_tools], sub_agents=[billing])
+```
+- **Client methods:** `list_mcp_servers(filter_str, page_size, page_token)`, `get_mcp_server(name)`, `get_mcp_toolset(mcp_server_name)` (returns an ADK `McpToolset`), `list_agents(...)`, `get_agent_info(name)`, `get_remote_a2a_agent(agent_name)` (returns a `RemoteA2aAgent`).
+- **Go:** `agentregistry.New(ctx, agentregistry.Config{ProjectID, Location})`, then `MCPToolset(ctx, name, WithMCPHTTPClient/WithMCPHeaders)` and `RemoteAgent(ctx, name, WithA2AHTTPClient/WithA2AHeaders)`.
+- **Fetch once at startup,** not per invocation, to avoid extra latency. An agent can have only one parent, so reuse a fetched remote agent under several orchestrators with `.clone()`.
+- **Production traffic** to the resolved endpoints should go through **Agent Gateway**. The registry supplies the endpoints; the gateway enforces policy.
+
+**Agent Studio (low-code)**
+- Add a tool with **Add (+) → "MCP Server from Agent Registry"**. You choose a **Location**, an **MCP Server**, and **Auth Config**, where `None` means access resolves through IAM. The option appears only **after the agent is saved**, and the agent can use **all** tools on that server.
+- **Direct MCP-URL connections and the Vertex AI Search data-store tool are deprecated,** and existing ones are read-only. To migrate:
+  - A direct MCP URL: register the server first, then re-add it from the registry.
+  - The data-store tool: switch to the **Agent Search MCP server** (`discoveryengine.googleapis.com`). The data-source selection doesn't carry over automatically.
+
+**Gemini Enterprise**
+- Admins can **import MCP servers from Agent Registry** as data stores. This requires an Agent Gateway in a region aligned with the app, with the registry associated to that gateway.
+- **Gap:** direct communication between Gemini Enterprise agents and Gemini Enterprise data connectors does **not** trigger gateway enforcement.
+
+**G. Authenticating to registered MCP servers**
+
+| Model | When | How |
+|---|---|---|
+| **Agent's own identity** (ADC = Agent Identity or a service account) | Google Cloud MCP servers and tools | The agent identity needs `agentregistry.viewer`, **plus** the product's own roles (for example Compute Instance Admin for a Compute Engine MCP tool), **plus** `mcp.toolUser` for Google remote MCP servers. ADK attaches Google auth headers to Google MCP servers automatically. For remote A2A agents, pass an authenticated `httpx.AsyncClient` |
+| **Auth manager: API key or 2-legged OAuth** | Custom or external tools called with the agent's own credentials | Create an **auth provider** in the Agent Identity auth manager, then **bind** it to the agent. No credentials in code |
+| **Auth manager: 3-legged OAuth** | The tool must act **on behalf of the user** (consent, delegated permission) | Create an auth provider with redirect URIs and bind it. The client app must handle the **`adk_request_credential`** function call, and the code passes **`continue_uri`** to `get_mcp_toolset`. The platform prompts for consent, stores the token, then resumes |
+| **Custom headers** (`header_provider`) | External toolsets that don't support the auth manager, or for extra context | Headers go **only to the target MCP server**, never to the Agent Registry API (which always uses ADC) and never to A2A agents |
+
+```bash
+# Auth-provider binding (needs roles/agentregistry.admin; the auth-provider path must use the project ID)
+gcloud agent-registry bindings create crm-oauth \
+  --project=PROJECT_ID --location=us-central1 --display-name="CRM OAuth" \
+  --source-identifier="urn:agent:projects-123:projects:123:locations:us-central1:aiplatform:reasoningEngines:456" \
+  --auth-provider="projects/PROJECT_ID/locations/us-central1/connectors/crm-oauth-provider"
+# Resource binding (agent -> MCP server), used to map orchestrator-to-tool relationships
+gcloud agent-registry bindings create orch-to-crm --project=PROJECT_ID --location=us-central1 \
+  --display-name="Orchestrator to CRM" --source-identifier="urn:agent:…" --target-identifier="urn:mcp:…"
+# also: gcloud agent-registry bindings list | describe | update | delete
+```
+In Terraform, `google_agent_registry_binding` takes `source`, `target` and `auth_provider_binding { auth_provider, scopes, continue_uri }`. Bindings aren't available in `us`/`eu`.
+
+**H. Governance: what registration unlocks**
+- **Agent Gateway (egress, `AGENT_TO_ANYWHERE`)** attaches up to two registries: one global and one regional or multi-regional. Destinations must be **registered** or matched by an explicit unregistered-host rule; otherwise the default is **deny**. One gateway governs up to 5,000 registered resources. If the registry is regional, policies apply only to resources in that region (see §5.1).
+- **IAM egress (allow) policies through IAP**, bound to registry resources:
+  ```bash
+  gcloud iap web set-iam-policy policy.json --project=PROJECT_ID \
+    --resource-type=agent-registry --mcp-server=crm-mcp --region=us-central1
+  # --agent=ID | --endpoint=ID | no resource flag = the whole registry; --folder/--organization also accepted
+  # Google-managed MCP servers: --region=global
+  ```
+  ```json
+  {"policy": {"bindings": [{"role": "roles/iap.egressor",
+    "members": ["principal://agents.global.org-ORG/resources/aiplatform/projects/NUM/locations/us-central1/reasoningEngines/support"],
+    "condition": {"title": "read-only CRM tools",
+      "expression": "api.getAttribute('iap.googleapis.com/mcp.tool.isReadOnly', false) == true"}}]}}
+  ```
+  The console condition builder offers **Name, ReadOnly, Destructive, Idempotent and Open World**. In Unified Access Policies, the equivalent attributes are `destination.agent_registry.mcp_server.tool.annotations.read_only_hint` / `destructive_hint` / `idempotent_hint` / `open_world_hint` and `…mcp_server.tool.name`.
+- **Policies are validated when you bind them, not at runtime.** Binding to an unregistered resource fails immediately with `NOT_FOUND`, so the docs recommend defining policies in CI/CD.
+- **Annotations are declarations, not proofs.** For manual servers, whoever writes `toolspec.json` asserts `readOnlyHint`. Annotation-based CEL is only as trustworthy as the people who can edit the registry, which is another reason to keep editor and admin roles away from agents.
+- **Content and semantics:**
+  - **Semantic governance policies** and **Model Armor** run at the gateway on top of IAM.
+  - For Google MCP servers, Model Armor floor settings can scan all traffic: `gcloud model-armor floorsettings update --full-uri=projects/P/locations/global/floorSetting --add-integrated-services=GOOGLE_MCP_SERVER --google-mcp-server-enforcement-type=INSPECT_AND_BLOCK`. If the agent and server are in different projects, floor settings in both projects mean Model Armor is invoked twice.
+- **Visibility:**
+  - Each MCP server's **Observability** tab. For the gateway's own Observability tab, see §5.1.
+  - The **topology** graph, keyed by resource URI.
+  - Agent Platform **Security** tab and per-resource **Security** tabs, which surface Security Command Center findings such as excessive permissions and toxic combinations.
+
+**I. Quotas and limits**
+
+| Limit | Value |
+|---|---|
+| Agents, MCP servers, endpoints, bindings, A2A skills, standalone skills per project | **100 each** (global and per region; quota can be raised) |
+| Skill revisions per skill | 100 |
+| API rate | 12,000/min aggregate (200 QPS); 1,200/min global (20 QPS); 1,200/min per region |
+| Agent spec (Agent Card) and MCP tool spec content | **10 KB** each |
+| A2A skills or tools per service | **100** |
+| Display name / description | 63 / 2,048 characters |
+| Page size | 100 |
+
+**J. End-to-end flow**
+
+```text
+1 REGISTER   Google MCP ── enable product API ──────────┐
+             GKE label / Cloud Run --functional-type ────┼──► Service ──projects──► McpServer
+             gcloud agent-registry services create ──────┘    (writable)            (read-only: tools + annotations)
+               --mcp-server-spec-type=tool-spec                                          │
+                                                                                         ▼
+2 DISCOVER   gcloud … mcp-servers search · registry MCP search_mcp_servers
+             ADK AgentRegistry.get_mcp_toolset() · Agent Studio "MCP Server from Agent Registry"
+                                                                                         │
+                                                                                         ▼
+3 BIND/AUTH  own identity: agentregistry.viewer + product roles + mcp.toolUser
+             or bindings create --auth-provider=…/connectors/X  (API key · 2LO · 3LO + continue_uri)
+                                                                                         │
+                                                                                         ▼
+4 CALL       Agent ──► Agent Gateway (AGENT_TO_ANYWHERE)
+                         a. IAP: iap.egressor on the registered target? (CEL: tool name, read-only hint)
+                         b. destination registered? otherwise DENY
+                         c. Model Armor · semantic governance
+                       ──► MCP server  tools/call
+```
+
+**K. Decision tables**
+
+| Choose | When |
+|---|---|
+| **Automatic** registration | A Google remote MCP server (just enable the API), GKE with the label and annotations, Cloud Run with `--functional-type=mcp-server`. The server is in the **same project** as the registry. You want lifecycle sync and zero tool-spec maintenance |
+| **Manual** (`services create`) | External, SaaS, on-premises or unsupported runtimes. A server in **another project** that a central gateway must govern. You want to publish only a **curated subset** of tools. Accept the cost: you maintain the tool spec and the entry's lifecycle |
+| Register as an **Endpoint** instead of an MCP server | The destination is a plain REST API, or you only need host-level allow or deny. Tool-level CEL and tool discovery need an **MCP server** entry |
+
+| Registry-resolved (`get_mcp_toolset`) | Hard-coded `McpToolset(url=…)` |
+|---|---|
+| Central discovery and reuse; gateway can enforce; bindings supply credentials without code; URL changes need no redeploy | Fewer moving parts for a single prototype. **Nothing to govern**: under an enforcing egress gateway, an unregistered host is denied anyway |
+| Cost: registry dependency at startup (fetch once and cache), plus IAM and binding setup | Cost: URLs and credentials in code, no inventory, no annotation-based policy |
+
+| Agent Registry skills (`Skill` resources, Preview) | Skill Registry (Agent Platform, Preview) |
+|---|---|
+| Governed **inside the registry** next to agents and MCP servers. `gcloud alpha agent-registry skills …`. Semantic search. ZIP ≤ 500 KB | Separate Agent Platform service consumed in ADK through `GCPSkillRegistry` + `SkillToolset` (`search_skills` / `load_skill`). Its own payload validation (ZIP ≤ 10 MB). The Skill Registry docs point to Agent Registry for central governance |
+
+Also distinguish **ADK `ApiRegistry`** (Cloud API Registry, §3.2.3), which is a toolset factory for Google-managed MCP servers. It is **not** the governance catalog that Agent Gateway enforces against.
+
+**L. Gotchas (high-yield)**
+- **No introspection on manual entries.** New tools are invisible until you run `services update --mcp-server-spec-content=…`, which is a **full replace**.
+- **Update the `Service`, not the `McpServer`.** The typed resources are read-only.
+- **Google MCP servers are global:** `--region=global` on policy bindings, otherwise `NOT_FOUND`.
+- **No manual registration or bindings in `us`/`eu`.**
+- **Auto-registration is single-project;** cross-project entries must be registered manually and you own their lifecycle.
+- **Remove an auto-registered Google server** by disabling its API. There's no "delete entry" for it.
+- **Bindings need `agentregistry.admin`;** editor can register but can't bind.
+- **Unannotated tools default to destructive and open-world.** CEL on `read_only_hint` then denies them.
+- **"Import tools" in the console works only for public URLs.** For private servers, paste the spec.
+- **The registry MCP server rejects API keys.** `tools/list` is anonymous; `tools/call` needs `mcp.toolUser`.
+- **`header_provider` never authenticates to the registry API,** and it doesn't apply to A2A agents.
+- **URNs are for lookup only.** IAM always uses the agent **principal**.
+
+**Signals**
+- "Make the partner's hosted MCP server discoverable and governable" → **manual `services create --mcp-server-spec-type=tool-spec`** plus a `toolspec.json`.
+- "BigQuery MCP appears in the registry without any action" → it was **auto-registered when the BigQuery API was enabled** (`global`).
+- "Custom MCP server on Cloud Run should self-register" → **`--functional-type=mcp-server`**.
+- "MCP server on GKE should self-register with its tools" → **`registry.gke.io/functional-type: "MCP_SERVER"`** plus the `modelcontextprotocol.info/*` annotations.
+- "Registry shows old tool list" → **`services update --mcp-server-spec-content`** (no re-scan).
+- "Agent should call tool as the signed-in user" → **auth manager 3LO + binding + `continue_uri`**.
+- "Allow only read-only tools from this server" → **IAP egress policy with a CEL condition on the read-only annotation**.
+- "Central security project governs agents in many projects" → **manual registration in the central registry** (same region or global) plus `iap.egressor`.
+- "Low-code agent needs a registered MCP tool" → **Agent Studio → MCP Server from Agent Registry**.
+
+**Distractors**
+- Expecting the registry to re-scan a manually registered server.
+- Patching the `McpServer` resource.
+- Using a URN as an IAM member.
+- Registering in `us`/`eu` to satisfy residency, then trying to bind.
+- Expecting `--region=us-central1` to work for Google MCP servers.
+- Using semantic search for MCP servers (it exists only for skills).
+- Granting agents `agentregistry.editor` "so they can self-register".
+- Relying on auto-registration across projects.
+- Registering an MCP server as a plain Endpoint and expecting tool-level policies.
+- Giving Cloud Run `--functional-type=agent` without `agent-identity`.
 
 ---
 
@@ -699,6 +1081,70 @@ D. Lower the model temperature
 
 **Answer: B.** Semantic governance evaluates each proposed tool call against user intent and constraints, can reference parameters, resists context poisoning, and changes without redeploying. Instructions can be overridden by injected text, and removing IAM access breaks legitimate refunds.
 
+**16.** A logistics company uses a partner's hosted MCP server at `https://mcp.partner.example/mcp`. Orchestrator agents must discover the server and its tools at runtime, and security wants tool-level egress policies at Agent Gateway. What should the platform team do?
+A. Deploy a Cloud Run proxy with `--functional-type=mcp-server` so the partner server is auto-registered
+B. Run `gcloud agent-registry services create` with `--mcp-server-spec-type=tool-spec`, `--mcp-server-spec-content=@toolspec.json` and `--interfaces=url=…,protocolBinding=jsonrpc` in a supported region
+C. Register the URL as an Endpoint with `--endpoint-spec-type=no-spec`
+D. Hard-code the URL in `McpToolset` and rely on the gateway's unregistered-host allow rule
+
+**Answer: B.** An external server needs manual registration, and the registry does not introspect it, so you must supply the tool spec for tools to be discoverable and policy-addressable. An Endpoint entry gives only host-level control. An unregistered-host rule can't express tool-level conditions.
+
+**17.** The team added three tools to a manually registered MCP server last week. Agents still can't find them with `search_mcp_servers`, and the console's **Tools** tab shows the old list. What is the fix?
+A. Wait for the registry's nightly re-scan
+B. Patch the `McpServer` resource with the new tools
+C. Run `gcloud agent-registry services update SERVER --mcp-server-spec-content=new-toolspec.json` with the complete tool list
+D. Delete and recreate the auth-provider binding
+
+**Answer: C.** Manual entries are never re-introspected. You update the writable `Service`, and the uploaded spec **replaces** the existing tool definitions, so it must contain every tool. `McpServer` is read-only.
+
+**18.** An engineer binds an IAP egress policy to the auto-registered BigQuery MCP server with `gcloud iap web set-iam-policy … --resource-type=agent-registry --mcp-server=… --region=us-central1`. It fails with `NOT_FOUND`, although the server appears in the registry. Why?
+A. The BigQuery API isn't enabled
+B. Google-managed remote MCP servers are registered in the `global` location, so the binding must use `--region=global`
+C. Policies can't reference auto-registered servers
+D. The engineer lacks `roles/agentregistry.editor`
+
+**Answer: B.** Google remote MCP servers are auto-registered globally. Regional bindings on them aren't supported and return `NOT_FOUND`. The server is visible, so its API is already enabled.
+
+**19.** A bank runs a central governance project with an egress Agent Gateway in `us-central1`. MCP servers are deployed to Cloud Run in 12 workload projects with `--functional-type=mcp-server`. Agents calling them through the central gateway are denied as unregistered destinations. What is the best fix?
+A. Enable the Agent Registry API in the central project and wait for cross-project auto-discovery
+B. Manually register each MCP server in the central project's registry (in `us-central1` or `global`), grant `roles/iap.egressor` to the agent principals on those entries, and manage the entries' lifecycle
+C. Attach all 12 workload-project registries to the gateway
+D. Switch the gateway to `CLIENT_TO_AGENT` mode
+
+**Answer: B.** Automatic registration is single-project, so cross-project components must be registered manually in the central registry, aligned by region, and their entries don't auto-update. A gateway attaches at most two registries (one global and one regional). Cross-project governance is egress-only.
+
+**20.** An ADK agent must create Jira issues **as the signed-in employee**, with user consent. No OAuth secrets may appear in code. The Jira MCP server is registered in Agent Registry. What should you implement?
+A. Store a Jira API key in Secret Manager and send it through `header_provider`
+B. Create a 3-legged OAuth auth provider in Agent Identity auth manager, bind it to the agent with `gcloud agent-registry bindings create … --auth-provider=…`, handle `adk_request_credential` in the client, and pass `continue_uri` to `get_mcp_toolset`
+C. Grant the agent identity `roles/mcp.toolUser`
+D. Create a resource binding with `--target-identifier` set to the Jira server's URN
+
+**Answer: B.** Delegated user access is 3LO through the auth manager. The binding lets ADK resolve the provider automatically, and `continue_uri` is where the user returns after consent. An API key acts as the agent, not the user. `mcp.toolUser` only covers Google MCP servers.
+
+**21.** To "speed up onboarding," a platform team grants every agent identity `roles/agentregistry.editor` so that agents can self-register the tools they build. The security review flags this. What is the main risk?
+A. Editors can't search the registry
+B. An agent could modify tool annotations such as `readOnlyHint` or `destructiveHint`, which egress policies rely on, and could enroll a malicious third-party agent or server
+C. Editor exceeds the 100-bindings quota
+D. Editor grants `iap.egressor` implicitly
+
+**Answer: B.** The docs explicitly warn against giving admin or editor roles to agents, because annotation and metadata tampering can make destructive tools look safe. Agents should hold `agentregistry.viewer`. Editor can't even create bindings (that needs admin).
+
+**22.** A low-code team's Agent Studio agent connects directly to an internal MCP server by URL. After a platform update, the tool is read-only and can't be edited. What should they do?
+A. Recreate the agent in ADK
+B. Register the MCP server in Agent Registry, remove the legacy direct connection, then add it through **Add (+) → MCP Server from Agent Registry** (Location, server, Auth Config)
+C. Re-enter the same URL as a new direct MCP connection
+D. Convert the server to an A2A agent
+
+**Answer: B.** Agent Studio has deprecated direct MCP-server connections, and existing ones become read-only, in favor of registered servers. The server must be registered first. The agent then gets all of that server's tools, with access resolved through IAM when Auth Config is `None`.
+
+**23.** A support agent may call any **read-only** tool on the registered `crm-mcp` server, including tools added in the future, but no write tools. The server's tool spec carries accurate MCP annotations. What is the most precise and maintainable control?
+A. List the allowed tool names in the agent's system instruction
+B. Bind an IAP egress allow policy on `crm-mcp` (`gcloud iap web set-iam-policy … --mcp-server=crm-mcp`), granting `roles/iap.egressor` to the agent principal with a CEL condition on the tool's read-only attribute
+C. A Model Armor template with prompt-injection filtering
+D. Remove the write tools from the MCP server's code
+
+**Answer: B.** Egress IAM policies at Agent Gateway can condition on registry tool annotations, so new read-only tools are covered automatically and write tools are denied. Instructions are bypassable. Model Armor inspects content, not tool permissions. Removing tools breaks other consumers.
+
 ---
 
 ### Key doc links
@@ -727,6 +1173,16 @@ D. Lower the model temperature
 - Agent Identity overview (IAM): https://docs.cloud.google.com/iam/docs/agent-identity-overview
 - Agent Runtime identity setup / access: https://docs.cloud.google.com/gemini-enterprise-agent-platform/build/runtime/setup · https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/manage-agent-access
 - Agent Registry: https://docs.cloud.google.com/agent-registry/overview · https://docs.cloud.google.com/agent-registry/concepts · https://docs.cloud.google.com/agent-registry/manage-mcp-tools · https://docs.cloud.google.com/agent-registry/use-agentregistry-mcp · https://docs.cloud.google.com/agent-registry/register-skills · https://docs.cloud.google.com/agent-registry/manage-skill-revisions
+- Agent Registry deep dive (MCP servers): data model https://docs.cloud.google.com/agent-registry/data-model · setup https://docs.cloud.google.com/agent-registry/setup · register MCP servers https://docs.cloud.google.com/agent-registry/register-mcp-servers · JSON schemas (toolspec / Agent Card) https://docs.cloud.google.com/agent-registry/json-schemas · locations https://docs.cloud.google.com/agent-registry/locations · roles https://docs.cloud.google.com/agent-registry/roles-permissions · quotas https://docs.cloud.google.com/agent-registry/quotas
+- Agent Registry registration: automatic https://docs.cloud.google.com/agent-registry/automatic-registration · manual https://docs.cloud.google.com/agent-registry/manual-registration · agents https://docs.cloud.google.com/agent-registry/register-agents · endpoints https://docs.cloud.google.com/agent-registry/register-endpoints · custom ADK agents https://docs.cloud.google.com/agent-registry/register-custom-adk-agents
+- Agent Registry consumption and auth: search https://docs.cloud.google.com/agent-registry/search-agents-and-tools · resolve endpoints / build orchestrators https://docs.cloud.google.com/agent-registry/resolve-endpoints-and-build-orchestrators · authenticate toolsets https://docs.cloud.google.com/agent-registry/authenticate-toolsets · bindings https://docs.cloud.google.com/agent-registry/manage-bindings · REST `Service` https://docs.cloud.google.com/agent-registry/reference/rest/v1/projects.locations.services
+- ADK Agent Registry client: https://adk.dev/integrations/agent-registry/
+- Cloud Run functional types (`--functional-type=agent|mcp-server`): https://docs.cloud.google.com/run/docs/ai/agent-platform-features
+- IAM egress policies on registry resources (`gcloud iap web set-iam-policy --resource-type=agent-registry`): https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/policies/configure-iam-policies
+- Agent Studio (MCP Server from Agent Registry, legacy-tool migration): https://docs.cloud.google.com/gemini-enterprise-agent-platform/agent-studio/design-agents
+- Gemini Enterprise: import MCP servers from Agent Registry: https://docs.cloud.google.com/gemini/enterprise/docs/connectors/custom-mcp-server/import-govern-mcp-server-agent-registry
+- Google Cloud MCP servers, enable and manage: https://docs.cloud.google.com/mcp/enable-disable-mcp-servers · https://docs.cloud.google.com/mcp/manage-mcp-servers
+- Agent Platform security findings: https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/view-security-findings
 - Skill Registry: https://docs.cloud.google.com/gemini-enterprise-agent-platform/build/skill-registry
 - Google Cloud MCP servers (supported products): https://docs.cloud.google.com/mcp/supported-products · auth: https://docs.cloud.google.com/mcp/set-up-authentication-mcp-servers
 - Policies (IAM + semantic governance): https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/policies/overview · https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/policies/semantic-governance-overview

@@ -127,6 +127,279 @@ toolset = McpToolset(
 | Audit | Logs show the agent only | Logs show **agent + user** |
 | Ops | No consent UX | Consent popup, `continue_uri` handler, token revocation |
 
+### 5.1.1b Deep dive — Agent-to-tool authentication patterns
+
+> 📊 **Infographic:** Agent-to-tool authentication
+>
+> [![Agent-to-tool authentication](../infographics/18-agent-to-tool-auth.png)](../infographics/18-agent-to-tool-auth.png)
+
+The exam tests this area heavily. Almost every agent-to-tool auth question comes down to three decisions:
+
+1. **Whose authority?** The agent's own (Agent Identity, a service account, 2LO, or an API key), or the end user's (3LO or a platform-passed user token).
+2. **What does the destination accept?** Google APIs accept a Google **access token**. Your own IAM-protected services (Cloud Run, IAP) accept a Google-signed **ID token** whose `aud` claim matches them. SaaS accepts **its own** OAuth token or API key. Maps-style Google services that aren't IAM-based accept a **Google API key**.
+3. **Where does the secret live?** In the auth manager vault, in Secret Manager, or nowhere, because the metadata server mints short-lived tokens. It never belongs in code, prompts, or model-visible state.
+
+**Token types in one table**
+
+| Token | Proves | Audience / scope | Accepted by | Typical lifetime |
+|---|---|---|---|---|
+| Google **access token** (OAuth 2.0) | Permissions of a principal (agent, SA, WIF, user) | OAuth scopes (`cloud-platform`, `bigquery`…) + IAM roles | Google APIs and **Google remote MCP servers** (`bigquery.googleapis.com/mcp`, `run.googleapis.com/mcp`…) | 1 h by default (`gcloud auth print-access-token --lifetime` up to 12 h) |
+| Google **ID token** (OIDC JWT) | Identity of the caller | `aud` = receiving service URL, or a configured custom audience | Cloud Run / Cloud Run functions (`run.invoker`), IAP (`iap.httpsResourceAccessor`), your own JWT validators | ~1 h. Fetched per request, no background refresh in ADK |
+| **Third-party OAuth** token | Agent (2LO) or user (3LO) authority at the SaaS | SaaS scopes | Jira, GitHub, Salesforce, ServiceNow… | Set by the SaaS. Refresh token needed for 3LO |
+| **API key** | "Caller has the key". No principal | API restrictions on the key | Services that don't need a principal (Maps Grounding Lite MCP, Translation v2), SaaS keys | Until rotated |
+| **Agent X.509 cert** | The agent's SPIFFE identity (mTLS) | — | Google APIs over mTLS, Agent Gateway | 24 h, auto-rotated |
+
+> Rule of thumb from the ADK docs: an **access token is your keycard** (it calls Google APIs), and an **ID token is your passport** (it calls your own IAM-secured services). Sending an access token to a private Cloud Run service gets a 401. So does sending an ID token to BigQuery.
+
+#### Master matrix — destination → auth
+
+| Destination | Recommended auth | Identity used | Where creds live | IAM / config needed | Exam keyword |
+|---|---|---|---|---|---|
+| **Google Cloud APIs** (BigQuery, GCS, Vertex/Gemini) | Agent Identity through ADC. Client libraries fetch a cert-bound access token | **Agent** (or user with 3LO: auth-manager 3LO provider with a Google authorization URL and scopes) | Nowhere. Minted by the metadata server | Resource-level role to `principal://agents.global.org-ORG.system.id.goog/resources/aiplatform/projects/NUM/locations/L/reasoningEngines/ID` (Cloud Run agents: `.../resources/run/projects/NUM/locations/L/services/NAME`) | "per-agent least privilege", "no keys", "ADC" |
+| **Google remote MCP servers** (BigQuery, Cloud Run, Monitoring, IAM… MCP) | ADC/OAuth access token in `Authorization: Bearer`, plus `x-goog-user-project` | Agent/workload (production) or user | Nowhere (ADC), or auth-manager 3LO for user delegation | **`roles/mcp.toolUser`** (`mcp.tools.call`) **plus** the product role (e.g. `bigquery.dataViewer`). The MCP endpoint must be enabled. IAM **deny** on `mcp.googleapis.com/tools.call` with `tool.isReadOnly` blocks write tools | "MCP Tool User", "read-only MCP tools org-wide", "no DCR" |
+| **Custom MCP server on Cloud Run** | Google-signed **ID token**, `aud` = service URL. Deploy `--no-allow-unauthenticated --functional-type=mcp-server` | **Agent** (Cloud Run IAM sees the caller only) | Nowhere. The metadata server mints the ID token | **`roles/run.invoker`** on the service for the calling agent's principal. For developer/CLI access: `--iap` + `roles/iap.httpsResourceAccessor` + a custom OAuth client allowlisted for programmatic access | "run.invoker", "audience", "X-Serverless-Authorization" |
+| **MCP server on GKE** | Server validates a Google ID token (`aud` check), or put it behind IAP, a service mesh (mTLS), or Agent Gateway as a registered endpoint (pattern, unverified as a single documented recipe) | Agent (caller). The server's own calls use **Workload Identity Federation for GKE** | Nowhere (WIF), or Secret Manager for SaaS keys the server uses | Server → Google APIs: role to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA` | "GKE", "no service account keys", "Workload Identity" |
+| **SaaS with API key** | **Auth manager API-key provider**. ADK injects the header | Agent | Auth manager vault (Google-managed) | `roles/agentidentity.user` **on the auth provider** for the agent principal | "no hardcoded keys", "centralized vault" |
+| **SaaS with OAuth client credentials (2LO)** | **Auth manager 2LO provider** (client ID/secret + token URL). No user, no consent | Agent | Vault holds the client secret. Access tokens minted and injected | `roles/agentidentity.user` on the provider | "machine-to-machine", "batch", "no user present" |
+| **SaaS acting as the user (3LO)** | **Auth manager 3LO provider** + `continue_uri` handler in your frontend. In Gemini Enterprise: a Discovery Engine **authorization resource** | **User** (delegated), attributed to agent + user | Vault stores the user's tokens and refreshes them | `roles/agentidentity.user` on the provider. Redirect URI registered at the SaaS = the auth-manager `.../oauthcallback` URL | "on behalf of", "consent", "user's own permissions" |
+| **Another agent via A2A** | Agent Runtime target: Google **access token** (ADC). Cloud Run target: **ID token** (`aud` = URL). Public target: whatever its **agent card `securitySchemes`** declare | Calling agent (or user token forwarded in `Authorization` when GE calls with `toolAuthorizations`) | Nowhere (ADC/metadata), or auth-manager binding | Agent Runtime: `roles/aiplatform.user` on the target reasoning engine + `roles/agentregistry.viewer` for discovery, **granted to the parent agent's identity**. Cloud Run: `roles/run.invoker`. Via Agent Gateway: an Access policy allowing `destination.agent_registry.agent.name` | "A2A", "agent card", "orchestrator identity" |
+| **OpenAPI / REST tools** | `OpenAPIToolset`/`RestApiTool` with `auth_scheme` + `auth_credential` (API key, OAuth2, OIDC, service account, or `ServiceAccount(use_id_token=True, audience=...)` for IAM-protected APIs). Or `GcpAuthProviderScheme` via `AuthenticatedFunctionTool` | Depends on the scheme | Auth manager (preferred), or Secret Manager + session state (self-managed) | Depends on the target | "OpenAPI spec", "securitySchemes", "AuthCredential" |
+| **Databases via MCP Toolbox** | Agent → Toolbox (on Cloud Run): ID token via `CredentialStrategy.workload_identity(target_audience=TOOLBOX_URL)`. Toolbox → DB: the server's own identity | Agent to Toolbox. **User** scoping through Toolbox **authenticated parameters** (bind `user_id` etc. from the user's OIDC token) and **authorized invocations** | Toolbox server config. DB passwords in Secret Manager, or IAM DB auth (unverified per engine) | `run.invoker` on Toolbox for the agent. DB-level grants for Toolbox's SA | "row-level per user", "SQL defined server-side, not by the LLM" |
+
+> **Correction/nuance to "IAM can't see MCP tool names":** for **Google Cloud remote MCP servers**, IAM **deny** policies can condition on `mcp.googleapis.com/tool.isReadOnly`, `tool.name`, `resource.service`, and `request.auth.oauth.client_id` (the last one is deny-only). These attributes apply **only** to the `mcp.tools.call` permission. For **your own** MCP servers, IAM sees only `run.invoker`. Tool-level control there needs Agent Gateway Access policies (or in-server authz).
+
+#### Identity choices compared
+
+| | **Agent Identity** | **Attached service account** (Agent Runtime default, Cloud Run `--service-account`) | **Workload Identity Federation** (GKE / external) | **End-user OAuth** (3LO / GE token) |
+|---|---|---|---|---|
+| Where available | Agent Runtime, Gemini Enterprise, **Cloud Run** (`--functional-type=agent --identity-type=agent-identity`, Preview) | Everywhere | GKE pods (KSA principal); on-prem or other clouds through a WIF pool | Any agent, through the auth manager, GE authorizations, or ADK native OAuth |
+| Principal | `principal://agents.global.org-ORG.system.id.goog/resources/...` (SPIFFE) | `serviceAccount:name@proj.iam.gserviceaccount.com` | `principal://iam.googleapis.com/.../workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA` | The human's account at Google or the SaaS |
+| Keys / impersonation | **No SA keys. Can't be impersonated.** Not shared | Keys possible (a risk). Impersonation possible. Often shared | No keys. Short-lived federated tokens | Refresh tokens must be vaulted |
+| Token theft | Cert-bound (CAA: mTLS, DPoP beyond the gateway) | Bearer, replayable | Bearer, replayable | Bearer at the SaaS. Vaulted by auth manager; with Agent Gateway + GE, **decrypted only at the gateway, so the agent never sees the raw credential** |
+| Lifecycle | Tied to the resource. **Re-create means a new principal** (Cloud Run too, when switching SA → agent-identity) | Independent of the agent | Tied to the KSA name | Per user. Consent can be revoked |
+| Audit shows | Agent SPIFFE ID (`principalSubject`). With delegation: **agent + user** | SA only. User attribution must be built by hand | Federated principal | User (+ agent when brokered by the auth manager) |
+| Pick when | Default for new agents on supported runtimes | Legacy, unsupported runtime, or a shared back-office job | Self-hosted agents or MCP servers on GKE | Per-user data or entitlements. Blocks confused-deputy attacks |
+
+**Acting as the agent vs on behalf of the user: audit attribution.** When the agent uses its own authority, Cloud Audit Logs show only the agent principal. Any "which user asked?" answer has to come from your own logging (session → user), and that link is the confused-deputy risk. With 3LO through the auth manager, the docs state that logs show **both the agent's and the user's identities**, and that all end-user access events are attributable to the agent's SPIFFE ID. With service-account impersonation, `serviceAccountDelegationInfo` shows the chain, but no end user appears.
+
+#### 3LO sequence (Agent Identity auth manager + ADK)
+
+```
+User        Frontend (your app)        Agent (ADK on Agent Runtime)        Auth manager (agentidentitycredentials)        SaaS (Jira/GitHub/Google)
+ |  "create a Jira issue"  |                         |                                   |                                           |
+ |------------------------>|---- stream_query ------>|                                   |                                           |
+ |                         |                         |-- retrieveCredentials (SPIFFE ID, needs roles/agentidentity.user) -->       |
+ |                         |                         |<-- uri_consent_required: authorization_uri + consent_nonce ---|              |
+ |                         |<-- FunctionCall adk_request_credential (auth_uri, nonce) --|                           |              |
+ |                         |  save fc.id + auth_config + nonce in session                 |                           |              |
+ |<-- popup auth_uri ------|                         |                                   |                                           |
+ |---------------------------------------- sign in + consent (scopes) ------------------------------------------------------------->|
+ |                         |                         |                                   |<-- code -> .../authProviders/NAME/oauthcallback (redirect URI registered at SaaS)
+ |                         |                         |                                   |-- code exchange, store access+refresh token in vault
+ |<-- redirect to continue_uri?user_id_validation_state=..&auth_provider_name=..&uuid=.. |                                   |
+ |------------------------>| POST {auth_provider}/credentials:finalize {userId, userIdValidationState, consentNonce}  --->|   |
+ |                         |<------------------------------------ 200 ------------------------------------------------|        |
+ |                         |-- FunctionResponse(name=adk_request_credential, id=fc.id, response=auth_config) -->|              |
+ |                         |      (no auth code needed; resume even if consent failed, ADK raises if it did)                    |
+ |                         |                         |-- retrieveCredentials -------------->| returns user token (refreshed if needed)  |
+ |                         |                         |------------------------ tool call, Authorization: Bearer <user token> ------->|
+ |                         |<------- answer ---------|<----------------------------------------------------- data as the user -------|
+ ... later: token expiry -> auth manager refreshes silently. Refresh token revoked/expired -> consent_required again.
+ ... admin: disable/delete the auth provider (all agents stop), or revoke a user's delegation (auth manager provides revocation; exact CLI unverified)
+```
+
+**`continue_uri` vs redirect URI (a frequent trap).** The **redirect URI** registered in the SaaS/Google OAuth client is the auth manager's callback: `https://agentidentitycredentials.googleapis.com/v1/projects/PROJECT_ID/locations/LOCATION/authProviders/NAME/oauthcallback`. The **`continue_uri`** is **your app's** endpoint that the user lands on afterwards, where you call `credentials:finalize`. It can be defaulted on the provider with `--three-legged-oauth-default-continue-uri`. Mixing the two up gives `redirect_uri_mismatch`.
+
+**Native ADK 3LO (no auth manager) differs as follows:**
+- Your client appends **its own** `redirect_uri` to `auth_uri`, captures the full callback URL, and sets `auth_config.exchanged_auth_credential.oauth2.auth_response_uri` (and `redirect_uri`).
+- It then sends a `FunctionResponse` named `adk_request_credential`. ADK performs the code exchange and **retries the tool**.
+- You own token storage and refresh. With the ADK Resume feature, include the original `invocation_id`.
+
+**Gemini Enterprise variant:**
+- **Setup.** Create an OAuth web client with redirect URIs `https://vertexaisearch.cloud.google.com/oauth-redirect` and `https://vertexaisearch.cloud.google.com/static/oauth/oauth.html`. Create an authorization with `serverSideOauth2`. Build the auth URI with `access_type=offline&prompt=consent&include_granted_scopes=true`, and reference it in the agent's `authorizationConfig.toolAuthorizations`.
+- **Runtime.**
+  - For an ADK agent, GE runs consent and places the user's token in session state under the authorization ID. Read it with `external_access_token_key="AUTH_ID"` (BigQuery toolset) or from `tool_context.state`.
+  - For an A2A agent on Cloud Run, the user token arrives in `Authorization` and the service-agent ID token in `X-Serverless-Authorization`.
+
+#### ADK snippets (current API, Python)
+
+**1. OpenAPI tool with OAuth2 (native ADK 3LO)**
+
+```python
+from fastapi.openapi.models import OAuth2, OAuthFlows, OAuthFlowAuthorizationCode
+from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
+from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+
+scheme = OAuth2(flows=OAuthFlows(authorizationCode=OAuthFlowAuthorizationCode(
+    authorizationUrl="https://accounts.google.com/o/oauth2/auth",
+    tokenUrl="https://oauth2.googleapis.com/token",
+    scopes={"https://www.googleapis.com/auth/calendar.readonly": "read calendar"})))
+cred = AuthCredential(auth_type=AuthCredentialTypes.OAUTH2,
+    oauth2=OAuth2Auth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET))  # from Secret Manager, never literals
+calendar = OpenAPIToolset(spec_str=spec, spec_str_type="yaml", auth_scheme=scheme, auth_credential=cred)
+# API key: token_to_scheme_credential("apikey", "header", "X-API-Key", key)
+# OIDC:    OpenIdConnectWithConfig(authorization_endpoint=..., token_endpoint=..., scopes=["openid"])
+```
+
+**2. IAM-protected service on Cloud Run: ID token (OpenAPI) and MCPToolset header**
+
+```python
+# OpenAPI toolset -> private Cloud Run API: ID token, audience = service URL
+from google.adk.auth.auth_credential import ServiceAccount
+from google.adk.tools.openapi_tool.auth.auth_helpers import service_account_scheme_credential
+scheme, cred = service_account_scheme_credential(ServiceAccount(
+    use_default_credential=True, use_id_token=True, audience="https://mcp-x-123.us-central1.run.app"))
+# use_id_token and audience must be set together; ADK raises otherwise.
+
+# McpToolset -> custom MCP server on Cloud Run: mint a fresh ID token per call
+import google.auth.transport.requests, google.oauth2.id_token
+from google.adk.tools.mcp_tool import McpToolset, StreamableHTTPConnectionParams
+MCP_URL = "https://mcp-x-123.us-central1.run.app"
+def run_invoker_headers(ctx):                       # ReadonlyContext -> headers
+    tok = google.oauth2.id_token.fetch_id_token(google.auth.transport.requests.Request(), MCP_URL)
+    return {"X-Serverless-Authorization": f"Bearer {tok}"}   # keeps Authorization free for a user token
+tools = McpToolset(connection_params=StreamableHTTPConnectionParams(url=f"{MCP_URL}/mcp"),
+                   header_provider=run_invoker_headers)
+```
+
+The caller's principal needs `roles/run.invoker`. The `aud` must be the `run.app` URL or a configured custom audience. A custom domain doesn't work as `aud`, and a traffic-tag URL still uses the base service URL. On Cloud Run with **agent identity**, identity certificates are on by default, and Python `google-auth` then requests a **bound** ID token. Call the target's `*.mtls.run.app` URL while presenting `/var/run/secrets/workload-spiffe-credentials/certificates.pem` + `private_key.pem`, or opt out with `--no-identity-certificate`. Whether Agent Runtime's agent identity can mint ID tokens for arbitrary audiences through `fetch_id_token` is unverified. If it can't, use the SA-based runtime or Cloud Run for that caller.
+
+**3. Custom `FunctionTool` with `request_credential` (self-managed tokens)**
+
+```python
+from google.adk.auth import AuthConfig
+from google.adk.tools import ToolContext
+def list_events(day: str, tool_context: ToolContext) -> dict:
+    cfg = AuthConfig(auth_scheme=scheme, raw_auth_credential=cred)
+    tokens = tool_context.state.get("user:cal_tokens")            # 1. cached (per user)
+    if not tokens:
+        exchanged = tool_context.get_auth_response(cfg)           # 2. just came back from consent?
+        if not exchanged:
+            tool_context.request_credential(cfg)                  # 3. emits adk_request_credential
+            return {"status": "pending", "message": "Awaiting user authorization."}
+        tokens = {"access_token": exchanged.oauth2.access_token,
+                  "refresh_token": exchanged.oauth2.refresh_token}
+        tool_context.state["user:cal_tokens"] = tokens            # 4. cache (see secret-handling caveat)
+    # 5. call API; on 401/invalid_grant -> pop cache and request_credential again
+```
+
+**4. Agent Identity auth manager (Preview, `pip install "google-adk[agent-identity]"`)**
+
+```python
+from google.adk.auth.credential_manager import CredentialManager
+from google.adk.integrations.agent_identity import GcpAuthProvider, GcpAuthProviderScheme
+from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
+from google.adk.auth.auth_tool import AuthConfig
+from google.adk.tools.mcp_tool import McpToolset, StreamableHTTPConnectionParams
+from vertexai.agent_engines import AdkApp
+
+jira = McpToolset(connection_params=StreamableHTTPConnectionParams(url="https://mcp.jira.example"),
+    auth_scheme=GcpAuthProviderScheme(
+        name="projects/P/locations/us-central1/authProviders/jira-3lo",   # v1 API: .../connectors/...
+        continue_uri="https://app.example.com/validateUserId"))           # 3LO only; optional if default set
+
+async def spotify_search(credential, query: str):   # AuthenticatedFunctionTool injects AuthCredential
+    token = credential.http.credentials.token        # 2LO / API key / 3LO token from the vault
+    ...
+search = AuthenticatedFunctionTool(func=spotify_search, auth_config=AuthConfig(
+    auth_scheme=GcpAuthProviderScheme(name="projects/P/locations/us-central1/authProviders/spotify")))
+
+class AuthenticatedAdkApp(AdkApp):                    # Python SDK deploy: register in set_up(),
+    def set_up(self):                                 # not at import time, or you get
+        CredentialManager.register_auth_provider(GcpAuthProvider())   # "No auth provider registered
+        super().set_up()                              #  for custom auth scheme 'gcpAuthProviderScheme'"
+# Local adk web / agents-cli deploy: module-level CredentialManager.register_auth_provider(GcpAuthProvider()) works.
+# No scheme in code at all: AgentRegistry(project_id, location).get_mcp_toolset(mcp_server_name=..., continue_uri=...)
+# resolves the auth provider from an Agent Registry binding (same region; auth providers are NOT in "global").
+```
+
+Deploy requirements from the docs: `"google-adk[agent-identity,mcp]>=2.7.1"` and `identity_type=AGENT_IDENTITY`.
+
+#### Token binding, secrets, least privilege, lifetime
+
+- **Token binding.** CAA is on by default for agent identities:
+  - Calls to Google APIs use mTLS with the auto-rotated 24 h X.509 cert.
+  - Beyond Agent Gateway, **DPoP** binds the token.
+  - A token copied into a raw header, or shared with another process, fails with **401 UNAUTHENTICATED**.
+  - The only escape hatch is `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`, which is **not recommended**. The exam answer is almost never "disable CAA".
+- **Where secrets live (best → worst):**
+  1. **Auth manager.** Vault + broker + refresh + revocation + audit, accessed with the agent's SPIFFE ID.
+  2. **Secret Manager.** On Agent Runtime, use `secret_env`/`env_vars={"X": {"secret": ID, "version": V}}`. The secret must be in the **same project**. With agent identity, grant `roles/secretmanager.secretAccessor` to the **Agent Platform Service Agent** `service-NUM@gcp-sa-aiplatform.iam.gserviceaccount.com`, because it fetches secrets at deploy time. On Cloud Run, use `--update-secrets`.
+  3. **Local `.env`.** Dev only, git-ignored.
+  4. **`InMemorySessionService` state.** Dev only.
+- **Never put secrets in** prompts or system instructions, model-visible tool arguments, SGP natural-language constraints (they can be quoted back to users), or logs.
+- **Session state is persisted** by `DatabaseSessionService`/`VertexAiSessionService`. The ADK docs warn that refresh tokens in session state are risky, so keep only short-lived tokens there.
+- **BigQuery analytics plugin redaction.** It redacts only `temp:` keys and a fixed list of key names. There is **no** special `secret:` prefix, and camelCase `clientSecret`/`accessToken` in `adk_request_credential` args can leak.
+- **Least privilege:**
+  - Grant resource-level roles (dataset, bucket, secret), not project-wide `Editor`.
+  - For Google MCP, grant `roles/mcp.toolUser` plus the narrow product role, and add a deny policy on read-write tools for production projects.
+  - Put baselines on the `principalSet`, and sensitive grants on the single `principal://`.
+  - Add PAB to cap eligibility.
+- **Scopes:**
+  - Request the narrowest OAuth scope (e.g. `run.readonly`, `drive.readonly`, `bigquery`), not `cloud-platform`, for user delegation.
+  - In the auth manager, GitHub and Microsoft support a **single scope** only.
+  - ServiceNow grants only the scopes configured on its app, and a mismatch causes a consent loop.
+- **Lifetime and refresh:**
+  - Google access and ID tokens last about 1 h. Client libraries and the metadata server refresh them, so don't cache ID tokens past `exp`.
+  - Auth manager refreshes 3LO tokens silently.
+  - Native ADK requires you to refresh (`creds.refresh(Request())`) and, on `invalid_grant`, clear the cache and call `request_credential` again.
+  - Google refresh tokens require `access_type=offline` (plus `prompt=consent` to reliably re-issue one).
+  - Google refresh tokens for apps in "Testing" publishing status expire after 7 days (unverified here; Google OAuth policy).
+
+#### Common failures and fixes
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| **401** from Google API, "Request had invalid authentication credentials" / CAA not met | Agent's cert-bound token replayed outside the runtime (manual header injection, token shared) | Let client libraries make the call (ADC). Opting out of CAA is a last resort |
+| **403** `agentidentity.authProviders.retrieveCredentials` denied | Principal lacks `roles/agentidentity.user` **on the auth provider** | Grant it to the agent's `principal://` (deployed) or to `user:you@` (local `adk web`) |
+| `No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'` | Registered at import time, then deployed with the Python SDK (serialized app) | Register in `set_up()` of an `AdkApp` subclass |
+| `Location of auth provider does not match location of binding` | Registry client/binding in `global` | Use one region for auth provider, MCP server, and registry client. Bindings aren't supported in `us`/`eu` multi-regions either |
+| `redirect_uri_mismatch` at the SaaS | Registered your app URL (or a wrong one) instead of the auth-manager callback | Register `.../authProviders/NAME/oauthcallback` exactly (see `gcloud ... describe`). Your URL is `continue_uri` |
+| Consent loop / token rejected | ServiceNow app lacks the scope; GitHub/Microsoft asked for >1 scope | Align scopes with the app config. Use a single scope |
+| Consent never completes (auth manager) | `continue_uri` handler doesn't POST `credentials:finalize`, or the nonce/user mismatch | Store `consent_nonce` + `user_id` per session and match on `uuid` for concurrent flows |
+| Cloud Run **401** | No token, **access token instead of ID token**, or wrong `aud` (custom domain, tag URL) | Mint an ID token with `aud` = `run.app` URL (or configure a custom audience) |
+| Cloud Run **403** | Caller principal lacks `roles/run.invoker`. For GE → A2A: the **Discovery Engine service agent** lacks it | Grant `run.invoker` to the right principal (agent identity, SA, or `service-NUM@gcp-sa-discoveryengine...`) |
+| App's own JWT check breaks after enabling Cloud Run IAM | Both IAM and the app want `Authorization` | Send the IAM ID token in `X-Serverless-Authorization`. If both headers are present, Cloud Run checks only that one and strips its signature before the container |
+| Google remote MCP **403** | Missing `roles/mcp.toolUser`, product role, MCP endpoint not enabled, or a read-only deny policy | Grant the roles, enable the MCP server, and check deny policies (`tools/list` still shows write tools) |
+| API key rejected by a Google MCP server | Server requires an IAM principal | Use ADC/OAuth. API keys work only for non-IAM services (e.g. Maps) |
+| `API_KEY_SERVICE_BLOCKED` / `API_KEY_INVALID` | API not enabled, or key restrictions / whitespace | Enable the API, fix the key's API restrictions, re-copy the key |
+| Third-party MCP client can't log in to Google MCP | Client relies on **Dynamic Client Registration / CIMD** | Not supported. Pre-create an OAuth client ID/secret |
+| `invalid_grant` / 401 after days of working | Refresh token expired or revoked; consent withdrawn | Clear cached tokens and re-trigger consent (the auth manager re-prompts) |
+| 403s right after redeploy, or after Cloud Run SA → agent-identity switch | New principal, old grants don't apply | `principalSet` baselines, re-bind from `effectiveIdentity`, deploy `--no-traffic` first on Cloud Run |
+| Agent Runtime deploy fails reading a secret | Agent Platform Service Agent lacks `secretAccessor`, or the secret is in another project | Grant it, and keep secrets in the agent's project |
+
+#### Exam signals (auth-specific)
+
+| Scenario says... | Pick |
+|---|---|
+| "agent calls BigQuery/GCS as itself, no keys" | **Agent Identity + ADC**, role on the resource |
+| "agent on **GKE** needs Google APIs" | **Workload Identity Federation for GKE** (Agent Identity is only on Agent Runtime, GE, and Cloud Run) |
+| "custom MCP server on Cloud Run, only our agents may call it" | `--no-allow-unauthenticated` + **`run.invoker`** to the agent principal + **ID token** with `aud` = URL |
+| "developers' CLI/IDE must reach private Cloud Run MCP with OAuth login" | **IAP on Cloud Run** (`--iap`, `iap.httpsResourceAccessor`, custom OAuth client for programmatic access) or `gcloud run services proxy` |
+| "app already uses the Authorization header" | **`X-Serverless-Authorization`** for the IAM token |
+| "use Google's BigQuery/Cloud Run MCP server" | ADC/OAuth + **`roles/mcp.toolUser`** + product role. No API keys, no DCR |
+| "block write MCP tools org-wide without a gateway" | **IAM deny** on `mcp.googleapis.com/tools.call` with `tool.isReadOnly == false` |
+| "nightly job, SaaS supports OAuth, no user" | **2LO** auth provider |
+| "SaaS only offers a static key" | **API-key auth provider** (not env vars, not code) |
+| "as the signed-in user, their permissions, consent" | **3LO** auth provider (custom app) / **GE authorization resource + `toolAuthorizations`** (GE-hosted) |
+| "agent must never see the user's raw credential" | Auth manager + **Agent Gateway** with GE (credential decrypted at the gateway) |
+| "no auth code in code, bind provider declaratively" | **Agent Registry binding** + `registry.get_mcp_toolset(...)` |
+| "orchestrator → sub-agent on Agent Runtime" | Roles on the **parent agent's identity** (`aiplatform.user` on the target engine, `agentregistry.viewer`) + gateway Access policy |
+| "public A2A agent, callers need to know how to authenticate" | Declare **`securitySchemes` + `security`** in the agent card |
+| "multi-tenant MCP, per-user JWT forwarded" | `McpToolset(header_provider=...)` |
+| "private Cloud Run API from an OpenAPI tool" | `ServiceAccount(use_default_credential=True, use_id_token=True, audience=URL)` |
+
+**Distractors to reject:**
+- "Store the SaaS key in an environment variable / the system prompt / session state." Use the auth manager, or Secret Manager at minimum.
+- "Use a service-account key file for the GKE/Cloud Run agent." Use WIF or the metadata server. Keys are the last resort for off-cloud callers with no WIF.
+- "Grant the **user** `run.invoker` / `aiplatform.user` so the A2A call works." The **calling agent's** principal needs it.
+- "Send the Google access token to the private Cloud Run MCP server." It needs an **ID token** with the right `aud`.
+- "Set `--allow-unauthenticated` and rely on the MCP server's obscurity." Only acceptable for a genuinely public A2A/MCP endpoint that declares and enforces its own `securitySchemes`.
+- "Register `continue_uri` as the OAuth redirect URI." Register the **auth-manager `oauthcallback`** URL.
+- "Use 2LO so actions are attributed to each user." 2LO is the agent's authority. Use 3LO.
+- "Disable CAA to fix a 401." Fix how the token is used instead.
+- "Grant the agent `roles/agentidentity.user` on the whole project." The documented pattern grants it **on the specific auth provider** resource, which is least privilege: one agent, one provider.
+
 ---
 
 ### 5.1.2 Principal Access Boundary (PAB) with Agent Identity
@@ -177,7 +450,7 @@ Rule of thumb:
 - **Data-exfiltration perimeter → VPC-SC.**
 - **Agent-to-tool traffic at the L7/MCP level (tool name, read-only hint, host/path/method) → Agent Gateway Access policy.**
 
-IAM allow/deny can't see MCP tool names, and Access policies can't protect a BigQuery dataset from a direct API call that bypasses the gateway. That is why you layer them.
+IAM allow/deny can't see tool names on **your own** MCP servers. For Google Cloud remote MCP servers, only IAM **deny** conditions on `mcp.tools.call` can use `tool.isReadOnly`/`tool.name` (see 5.1.1b). Access policies can't protect a BigQuery dataset from a direct API call that bypasses the gateway. That is why you layer them.
 
 ---
 
@@ -292,7 +565,7 @@ gcloud iam access-policies create agent-egress --details-rules=policy.json --pro
 ### 5.1.4 Agentic governance and policy enforcement: Agent Registry and Model Armor
 
 #### Agent Registry
-- **What it is:** the central catalog of **agents, MCP servers, endpoints, and skills (Preview)**. You can search it by keyword, prefix, or semantics. Agent Runtime and Gemini Enterprise agents are **auto-registered**. Custom agents on Cloud Run or GKE are registered manually. Registries can be global, multi-regional, or regional.
+- **What it is:** the central catalog of **agents, MCP servers, endpoints, and skills (Preview)**. Agents and MCP servers are searchable by keyword or prefix (semantic search exists only for skills). **Auto-registration** (same project only) covers Agent Runtime and Gemini Enterprise agents, Google remote MCP servers, Cloud Run services deployed with `--functional-type=agent|mcp-server`, and GKE workloads labelled `registry.gke.io/functional-type`. Everything else, including cross-project entries, is registered manually (see §3.2.4). Registries can be global, multi-regional, or regional.
 - **Governance role:** the gateway's allowlist, since unregistered destinations are denied unless a policy names them by host. Registry entries are also the targets of Access policies (`--agent`, `--endpoint`, `--mcp-server`), Semantic Governance policies, and auth-provider **bindings**.
 - **IAM roles:** `roles/agentregistry.viewer` (discover), `.editor`, and `.admin` (bindings). For **A2A delegation**, the *parent agent's identity* (not your user) needs `roles/agentregistry.viewer` to resolve the sub-agent and `roles/aiplatform.user` on the sub-agent's reasoning engine.
 - **Composite Google APIs endpoint:** register several core Google API hostnames in a single registry entry, which suits multi-project setups.
@@ -354,7 +627,7 @@ The ADK safety guidance lists these layers: identity and authorization, in-tool 
 | **Callbacks** (`before_model_callback`, `after_model_callback`, `before_tool_callback`, `after_tool_callback`, `before/after_agent_callback`) | Agent code | Yes, unless the callback calls an LLM | Arg validation against session state (e.g. `user_id` must match the session), table allowlists, PII scrub, tool-output screening | Per-agent code to maintain. Return an `LlmResponse` from `before_model` to skip the model; return a `dict` from `before_tool` to skip the tool |
 | **Plugins** (`BasePlugin` on the `App`/`Runner`) | Runner-global | Yes | Same hooks, applied **to every agent, tool, and model call** in the app. Plugin callbacks run **before** agent-level callbacks (verify precedence in ADK docs). ModelArmorPlugin, ATR guardrail plugin | Global scope means a bug hurts everything |
 | **In-tool guardrails** | Tool | Yes | The policy lives in developer-set `ToolContext`/state (e.g. `select_only`, allowed tables), which the model can't change | Must be designed into each tool |
-| **LLM-as-judge** (Gemini Flash-Lite in a callback) | Agent code | No | Novel or semantic attacks (e.g. "sympathy" social engineering that got past Model Armor in TechTrapture's ADK security demos), off-topic or brand risk | Extra latency and tokens. The judge itself can be injected |
+| **LLM-as-judge** (Gemini Flash-Lite in a callback) | Agent code | No | Novel or semantic attacks (e.g. "sympathy" social engineering that can get past Model Armor's prompt-injection filter), off-topic or brand risk | Extra latency and tokens. The judge itself can be injected |
 | **Semantic Governance** | Gateway | No (managed LLM judge) | Tool call vs user intent and business rules, **without redeploying code** | Latency. Rationale leakage |
 | **HITL** | Workflow | Human | Irreversible or high-value actions | Throughput and latency. Needs a UI and resumable state |
 | **Sandboxed code exec** | Runtime | Yes | Model-generated code escaping (Agent Platform sandbox, GKE Sandbox, Cloud Workstations) | — |
@@ -569,6 +842,62 @@ C. Disable IAP on the gateway
 D. Use an API key between agents
 **Answer: A.** Permissions must go to the calling agent's principal, not the user's. Gateway egress is default-deny, so an explicit agent-to-agent allow rule is also needed.
 
+**13.** An ADK agent on Agent Runtime (Agent Identity enabled) calls a custom MCP server deployed to Cloud Run with `--no-allow-unauthenticated`. Every tool call fails with 403. The agent sends an ID token whose audience is the service's `run.app` URL. What is the most likely fix?
+A. Redeploy the MCP server with `--allow-unauthenticated`
+B. Grant `roles/mcp.toolUser` to the agent on the project
+C. Grant `roles/run.invoker` on the MCP service to the agent's `principal://agents.global.org-…/reasoningEngines/ID`
+D. Store an API key for the MCP server in Secret Manager
+**Answer: C.** The token is valid and the audience is right, so the failure is authorization. Cloud Run checks `run.invoker` for the caller's principal. `mcp.toolUser` (B) governs Google's remote MCP servers, not your own. A removes authentication entirely, and D adds a secret that Cloud Run IAM ignores.
+
+**14.** A Cloud Run-hosted A2A agent validates end-user OAuth tokens in the `Authorization` header. The team now wants Cloud Run IAM to also verify that only the Gemini Enterprise service agent can invoke it. How should the IAM token be sent?
+A. In `X-Serverless-Authorization`, with `roles/run.invoker` granted to `service-PROJECT_NUMBER@gcp-sa-discoveryengine.iam.gserviceaccount.com`
+B. Concatenated with the user token in `Authorization`
+C. As a query parameter
+D. Replace the user token with the service agent's access token
+**Answer: A.** Cloud Run checks only `X-Serverless-Authorization` when both headers are present, and forwards `Authorization` untouched. Gemini Enterprise does exactly this: a service-agent OIDC token plus the user token. D loses user delegation.
+
+**15.** An agent using the Agent Identity auth manager works in `adk web` but, once deployed to Agent Runtime with the Vertex AI Python SDK, fails at query time with "No auth provider registered for custom auth scheme 'gcpAuthProviderScheme'". What fixes it?
+A. Grant `roles/agentidentity.admin` to the agent
+B. Call `CredentialManager.register_auth_provider(GcpAuthProvider())` inside `set_up()` of an `AdkApp` subclass
+C. Move the auth provider to the `global` location
+D. Recreate the provider with the legacy `connectors` API
+**Answer: B.** The SDK serializes the app, so module-level registration doesn't run in the container. `set_up()` runs at container start. C is wrong because auth providers aren't available in `global`.
+
+**16.** A platform team lets many agents use Google's remote BigQuery MCP server. Security requires that no agent in the org can ever call a tool that modifies data, regardless of granted roles, and there is no Agent Gateway yet. What should you implement?
+A. Remove write tools from each agent's instructions
+B. An org-level IAM deny policy on `mcp.googleapis.com/tools.call` with the condition `api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == false`
+C. A PAB policy limiting agents to read-only datasets
+D. A Model Armor floor setting for `GOOGLE_MCP_SERVER`
+**Answer: B.** IAM deny policies support MCP attributes (`tool.isReadOnly`, `tool.name`) for the `mcp.tools.call` permission on Google Cloud MCP servers. PAB (C) limits resources, not tool types. Model Armor (D) screens content, and A isn't enforcement. `tools/list` still shows the write tools, but calls to them fail.
+
+**17.** A nightly reconciliation agent pulls opportunities from Salesforce. No user is present, Salesforce supports OAuth client credentials, and security forbids secrets in code or environment variables. What is the recommended approach?
+A. 3-legged OAuth auth provider, with a service user logged in once
+B. 2-legged OAuth auth provider in the auth manager, `roles/agentidentity.user` on it for the agent, referenced with `GcpAuthProviderScheme`
+C. Salesforce password in Secret Manager
+D. Grant the agent identity a Salesforce role in IAM
+**Answer: B.** 2LO is the documented choice for M2M with OAuth-capable services. The vault holds the client secret and ADK injects the tokens. A needs a consenting user, C is basic auth (not recommended), and D doesn't apply because Salesforce isn't governed by Google IAM.
+
+**18.** An ADK agent registered in Gemini Enterprise must query BigQuery **as the signed-in employee**, so that dataset ACLs apply per user. What completes the design?
+A. Grant the agent identity `bigquery.dataViewer` on all datasets
+B. Create an OAuth web client with the Gemini Enterprise redirect URIs, create an authorization resource (`serverSideOauth2`), reference it in `authorizationConfig.toolAuthorizations`, and read the token in the agent through `external_access_token_key="AUTH_ID"`
+C. Use Workload Identity Federation
+D. Pass the user's password to the agent through session state
+**Answer: B.** GE runs consent and hands the user token to the agent, so BigQuery enforces that user's IAM. A acts as the agent and removes per-user enforcement, which is the confused-deputy risk. The GE authorization URI should include `access_type=offline` and `prompt=consent`.
+
+**19.** A company runs its agents on GKE Autopilot and wants each agent to call Vertex AI and Cloud Storage without any key files and with per-workload least privilege. What should they use?
+A. Agent Identity with `identity_type=AGENT_IDENTITY`
+B. A service-account JSON key mounted as a Kubernetes Secret
+C. Workload Identity Federation for GKE, granting roles to `principal://iam.googleapis.com/projects/NUM/locations/global/workloadIdentityPools/PROJECT.svc.id.goog/subject/ns/NS/sa/KSA`
+D. The node's default Compute Engine service account
+**Answer: C.** Agent Identity is supported on Agent Runtime, Gemini Enterprise, and Cloud Run, not GKE. WIF for GKE gives keyless, per-KSA principals. B and D are key-based or over-shared.
+
+**20.** A 3LO GitHub integration through the auth manager fails at the GitHub step with `redirect_uri_mismatch`. The team registered `https://app.example.com/validateUserId` as the callback in the GitHub OAuth app. What is wrong?
+A. GitHub needs multiple scopes
+B. The GitHub OAuth app must register the auth manager's callback `https://agentidentitycredentials.googleapis.com/v1/projects/P/locations/L/authProviders/NAME/oauthcallback`. `validateUserId` is the `continue_uri` that the user reaches afterwards
+C. The agent lacks `roles/run.invoker`
+D. CAA blocked the redirect
+**Answer: B.** The auth manager receives the code at its `oauthcallback` and then sends the user to your `continue_uri`, where you call `credentials:finalize`. Note also that GitHub supports only a single scope in the auth manager, which makes A the opposite of the fix.
+
 ---
 
 ### Key doc links
@@ -604,3 +933,16 @@ D. Use an API key between agents
 - Gemini safety filters: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/configure-safety-filters
 - Register ADK agent in Gemini Enterprise (authorizations): https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-adk-agent
 - Register A2A agent in Gemini Enterprise (auth headers): https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-a2a-agent
+- Auth manager troubleshooting: https://docs.cloud.google.com/iam/docs/troubleshoot-auth-manager
+- Manage auth providers (edit/disable/delete): https://docs.cloud.google.com/iam/docs/manage-auth-providers-v2
+- Authenticate with an agent's own authority: https://docs.cloud.google.com/iam/docs/auth-agent-own-identity
+- Agent Registry authenticate toolsets / bindings: https://docs.cloud.google.com/agent-registry/authenticate-toolsets , https://docs.cloud.google.com/agent-registry/manage-bindings
+- Authenticate to Google MCP servers / set up auth: https://docs.cloud.google.com/mcp/authenticate-mcp , https://docs.cloud.google.com/mcp/set-up-authentication-mcp-servers
+- Prevent read-write MCP tool use (IAM deny attributes): https://docs.cloud.google.com/mcp/prevent-read-write-tool-use
+- Cloud Run agents (agent identity, ID tokens, bound tokens): https://docs.cloud.google.com/run/docs/ai/authenticate-agents , https://docs.cloud.google.com/run/docs/ai/agent-platform-features
+- Cloud Run MCP servers (hosting, IAP): https://docs.cloud.google.com/run/docs/host-mcp-servers , https://docs.cloud.google.com/run/docs/ai/authenticate-mcp-servers
+- Cloud Run service-to-service (ID token, X-Serverless-Authorization): https://docs.cloud.google.com/run/docs/authenticating/service-to-service
+- Deploy A2A agents to Cloud Run (securitySchemes): https://docs.cloud.google.com/run/docs/deploy-a2a-agents
+- Workload Identity Federation for GKE: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
+- Agent Runtime deploy (env vars / Secret Manager secrets): https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/deploy-an-agent
+- IAP programmatic authentication: https://docs.cloud.google.com/iap/docs/authentication-howto
