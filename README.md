@@ -96,4 +96,4 @@ Hands-on walkthroughs from three [TechTrapture YouTube](https://youtube.com/@tec
 
 [YouTube](https://youtube.com/@techtrapture) · [LinkedIn](https://www.linkedin.com/in/vishal-bulbule/) · [Medium](https://vishalbulbule.medium.com/) · [X](https://x.com/vishal__bulbule)
 
-<img src="https://komarev.com/ghpvc/?username=vishal-bulbule-google-cloud-agentic-architect-exam-guide&label=Guide%20Views&color=1E3A8A&style=for-the-badge" alt="guide views"/>
+<img src="https://komarev.com/ghpvc/?username=vishal-bulbule-gcp-agentic-exam-guide&label=Guide%20Views&color=1E3A8A&style=for-the-badge" alt="guide views"/>
